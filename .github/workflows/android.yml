@@ -26,7 +26,7 @@ jobs:
       - name: Prepare web assets
         run: |
           mkdir -p build/www
-          cp index.html app.js firebase-config.js build/www/
+          cp -r index.html app.js firebase-config.js brands build/www/
 
       - name: Create Capacitor Android project
         working-directory: build
