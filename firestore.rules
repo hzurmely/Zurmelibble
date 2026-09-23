@@ -10,6 +10,10 @@ service cloud.firestore {
     function hasRole(org, roles) { return signedIn() && exists(memberPath(org, uid())) && myMember(org).role in roles; }
     function isMember(org) { return hasRole(org, ['owner', 'admin', 'manager', 'member']); }
     function isAdmin(org) { return hasRole(org, ['owner', 'admin']); }
+    // Zurmelibble platform owner: approves new organisations.
+    function isSuper() { return signedIn() && request.auth.uid == 'dreUCmV8iBcaauMuOVHIv4IlxqG3'; }
+    // Organisations created before approval existed have no status and count as approved.
+    function approved(org) { return get(orgPath(org)).data.get('status', 'approved') == 'approved'; }
     // Managers manage the team they belong to.
     function managesTeam(org, teamId) {
       return hasRole(org, ['manager']) && myMember(org).teamId != null && teamId == myMember(org).teamId;
@@ -28,19 +32,26 @@ service cloud.firestore {
       allow get: if signedIn();
       allow create: if signedIn()
         && getAfter(memberPath(request.resource.data.orgId, uid())).data.role in ['owner', 'admin'];
-      allow update: if isAdmin(resource.data.orgId) && request.resource.data.orgId == resource.data.orgId;
+      allow update: if isSuper() || (isAdmin(resource.data.orgId) && request.resource.data.orgId == resource.data.orgId
+        && request.resource.data.get('status', 'approved') == resource.data.get('status', 'approved'));
       allow delete: if isAdmin(resource.data.orgId);
     }
 
     match /orgs/{org} {
-      allow get: if hasRole(org, ['owner', 'admin', 'manager', 'member', 'pending']);
-      allow create: if signedIn() && request.resource.data.ownerId == uid();
-      allow update: if isAdmin(org) && request.resource.data.ownerId == resource.data.ownerId;
-      allow delete: if hasRole(org, ['owner']);
+      allow get: if isSuper() || hasRole(org, ['owner', 'admin', 'manager', 'member', 'pending']);
+      allow list: if isSuper();
+      // New organisations wait for platform approval; only the platform owner can set a brand.
+      allow create: if signedIn() && request.resource.data.ownerId == uid()
+        && (isSuper() || (request.resource.data.status == 'pending' && !('brand' in request.resource.data)));
+      allow update: if isSuper() || (isAdmin(org)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.get('status', 'approved') == resource.data.get('status', 'approved')
+        && request.resource.data.get('brand', null) == resource.data.get('brand', null));
+      allow delete: if isSuper() || hasRole(org, ['owner']);
 
       match /members/{m} {
-        allow get: if signedIn() && (uid() == m || isAdmin(org) || managesTeam(org, resource.data.teamId));
-        allow list: if isAdmin(org) || managesTeam(org, resource.data.teamId);
+        allow get: if signedIn() && (uid() == m || isSuper() || isAdmin(org) || managesTeam(org, resource.data.teamId));
+        allow list: if isSuper() || isAdmin(org) || managesTeam(org, resource.data.teamId);
 
         allow create: if signedIn() && uid() == m && request.resource.data.uid == m && (
           // Founder: the organisation is being created in the same batch.
@@ -50,6 +61,7 @@ service cloud.firestore {
           ||
           // Joining with a valid invite code.
           (request.resource.data.teamId == null
+            && approved(org)
             && exists(/databases/$(db)/documents/codes/$(request.resource.data.code))
             && get(/databases/$(db)/documents/codes/$(request.resource.data.code)).data.orgId == org
             && request.resource.data.role == (get(orgPath(org)).data.requireApproval == true ? 'pending' : 'member'))
@@ -62,7 +74,8 @@ service cloud.firestore {
             && (request.resource.data.role != 'owner' || resource.data.role == 'owner'))
           || (signedIn() && uid() == m && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']));
 
-        allow delete: if resource.data.role != 'owner' && (isAdmin(org) || (signedIn() && uid() == m));
+        allow delete: if (resource.data.role != 'owner' && (isAdmin(org) || (signedIn() && uid() == m)))
+          || (signedIn() && uid() == m && !existsAfter(orgPath(org)));
       }
 
       match /teams/{t} {
@@ -72,7 +85,7 @@ service cloud.firestore {
 
       match /shifts/{s} {
         allow read: if signedIn() && (resource.data.uid == uid() || isAdmin(org) || managesTeam(org, resource.data.teamId));
-        allow create: if isMember(org)
+        allow create: if isMember(org) && approved(org)
           && request.resource.data.uid == uid()
           && request.resource.data.teamId == myMember(org).teamId;
         allow update: if isAdmin(org) || managesTeam(org, resource.data.teamId)

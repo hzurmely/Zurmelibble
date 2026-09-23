@@ -150,6 +150,7 @@
     <button data-tab="teams" data-need="admin" hidden>Teams</button>
     <button data-tab="map" data-need="staff" hidden>Map</button>
     <button data-tab="settings">Settings</button>
+    <button data-tab="platform" data-need="super" id="platformTab" hidden>Platform</button>
   </nav>
 
   <main>
@@ -184,6 +185,45 @@
       <h2>Waiting for approval</h2>
       <p class="muted">You asked to join <b id="pendingOrg"></b>. An admin needs to approve you before you can clock in. This page updates by itself.</p>
       <button class="b-ghost" id="cancelRequest" type="button">Cancel request</button>
+    </section>
+
+    <!-- Organisation waiting for / refused platform approval -->
+    <section id="reviewView" class="card auth" style="margin-top:20px" hidden>
+      <h2 id="reviewTitle">Waiting for approval</h2>
+      <p class="muted" id="reviewText"></p>
+      <div class="row">
+        <button class="b-ghost" id="deleteOrgReq" type="button">Delete request</button>
+        <button class="b-ghost" id="leaveReviewOrg" type="button">Leave organisation</button>
+      </div>
+    </section>
+
+    <!-- Platform panel: Zurmelibble owner only -->
+    <section data-view="platform" hidden>
+      <div class="card">
+        <div class="stats">
+          <div class="stat"><small>Waiting for approval</small><b id="pfPending">0</b></div>
+          <div class="stat"><small>Approved</small><b id="pfApproved">0</b></div>
+          <div class="stat"><small>Rejected or suspended</small><b id="pfRejected">0</b></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2>Organisations on Zurmelibble</h2>
+        <div class="row" style="margin-bottom:12px">
+          <select id="pfFilter">
+            <option value="pending">Waiting for approval</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected or suspended</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Organisation</th><th>Owner</th><th>Created</th><th>People</th><th>Status</th><th></th></tr></thead>
+            <tbody id="pfList"></tbody>
+          </table>
+        </div>
+        <p class="muted" id="pfEmpty">No organisations waiting for approval.</p>
+      </div>
     </section>
 
     <!-- Clock tab -->

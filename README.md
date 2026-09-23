@@ -5,7 +5,7 @@ A simple Jibble style time tracking app. Runs on the web (GitHub Pages) and on A
 ## Features
 
 * Accounts with email and password (with a show password button)
-* Organisations: anyone can create one; people join with an invite code or link
+* Organisations: anyone can request one; the Zurmelibble owner approves it in the Platform panel; people join with an invite code or link
 * Optional "require approval" so admins approve new people first
 * Teams inside each organisation
 * Roles: Owner, Admin, Manager (sees their own team), Member (sees only themselves)

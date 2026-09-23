@@ -6,7 +6,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection,
-  query, where, orderBy, limit, onSnapshot, writeBatch, connectFirestoreEmulator
+  query, where, orderBy, limit, onSnapshot, writeBatch, connectFirestoreEmulator, getCountFromServer
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 const $ = id => document.getElementById(id);
@@ -49,6 +49,11 @@ const role = () => myMember?.role || null;
 const isAdmin = () => ['owner', 'admin'].includes(role());
 const isManager = () => role() === 'manager';
 const isStaff = () => isAdmin() || isManager();
+// Zurmelibble platform owner (approves new organisations). Enforced in firestore.rules too.
+const SUPER_UID = 'dreUCmV8iBcaauMuOVHIv4IlxqG3';
+const isSuper = () => user?.uid === SUPER_UID;
+const orgStatus = o => o?.status || 'approved';
+let allOrgs = [], orgCounts = {}, ownerInfo = {}, platformFilter = 'pending';
 const isActive = () => ['owner', 'admin', 'manager', 'member'].includes(role());
 const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', manager: 'Manager', member: 'Member', pending: 'Pending' };
 const sameDay = (ts, d = new Date()) => new Date(ts).toDateString() === d.toDateString();
@@ -234,6 +239,12 @@ onAuthStateChanged(auth, async u => {
     renderSwitcher();
     route();
   }));
+  if (u.uid === SUPER_UID) {
+    userUnsubs.push(onSnapshot(collection(db, 'orgs'), s => {
+      allOrgs = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((x, y) => (y.createdAt || 0) - (x.createdAt || 0));
+      render();
+    }, err => console.error(err)));
+  }
   userUnsubs.push(onSnapshot(ref, s => {
     profile = s.data() || {};
     $('meName').textContent = profile.name || u.email;
@@ -299,6 +310,7 @@ function setScreen(name) {
   show($('loadingView'), name === 'loading');
   show($('onboardView'), name === 'onboard');
   show($('pendingView'), name === 'pending');
+  show($('reviewView'), name === 'review');
   show($('tabs'), name === 'app');
   document.querySelectorAll('[data-view]').forEach(v => show(v, name === 'app' && v.dataset.view === tab));
 }
@@ -327,9 +339,10 @@ $('createOrgForm').onsubmit = async e => {
     const code = newCode();
     const me = profile.name || user.email;
     const b = writeBatch(db);
-    b.set(ref, { name, ownerId: user.uid, code, requireApproval: false, createdAt: Date.now() });
+    const status = isSuper() ? 'approved' : 'pending';
+    b.set(ref, { name, ownerId: user.uid, ownerName: me, ownerEmail: user.email, code, requireApproval: false, status, createdAt: Date.now() });
     b.set(doc(db, 'orgs', ref.id, 'members', user.uid), { uid: user.uid, name: me, email: user.email, role: 'owner', teamId: null, joinedAt: Date.now() });
-    b.set(doc(db, 'codes', code), { orgId: ref.id, orgName: name, requireApproval: false });
+    b.set(doc(db, 'codes', code), { orgId: ref.id, orgName: name, requireApproval: false, status });
     b.set(doc(db, 'users', user.uid, 'memberships', ref.id), { name, joinedAt: Date.now() });
     b.update(doc(db, 'users', user.uid), { currentOrg: ref.id });
     await b.commit();
@@ -346,6 +359,7 @@ $('joinOrgForm').onsubmit = async e => {
     const c = await getDoc(doc(db, 'codes', code));
     if (!c.exists()) throw new Error('That code doesn\'t exist. Check it with your admin.');
     const { orgId: id, orgName, requireApproval } = c.data();
+    if ((c.data().status || 'approved') !== 'approved') throw new Error(`${orgName} isn't open yet. It's waiting for approval by Zurmelibble.`);
     if (memberships.some(m => m.id === id)) throw new Error(`You're already in ${orgName}.`);
     const existing = await getDoc(doc(db, 'orgs', id, 'members', user.uid));
     const b = writeBatch(db);
@@ -708,14 +722,99 @@ function render() {
     $('pendingOrg').textContent = org?.name || memberships.find(m => m.id === orgId)?.name || 'the organisation';
     setScreen('pending'); return;
   }
-  document.querySelectorAll('[data-need]').forEach(el => show(el, el.dataset.need === 'admin' ? isAdmin() : isStaff()));
-  const allowed = ['clock', 'sheet', 'settings'].concat(isStaff() ? ['people', 'map'] : [], isAdmin() ? ['teams'] : []);
+  if (org && orgStatus(org) !== 'approved' && tab !== 'platform') {
+    const st = orgStatus(org), owner = role() === 'owner';
+    $('reviewTitle').textContent = st === 'pending' ? 'Waiting for approval' : 'Not approved';
+    $('reviewText').textContent = st === 'pending'
+      ? `${org.name} was sent to Zurmelibble for approval. You'll be able to invite people and clock in as soon as it's approved. This page updates by itself.`
+      : `${org.name} wasn't approved by Zurmelibble, so it can't be used right now.`;
+    show($('deleteOrgReq'), owner); show($('leaveReviewOrg'), !owner);
+    show($('tabs'), false);
+    setScreen('review'); return;
+  }
+  document.querySelectorAll('[data-need]').forEach(el => show(el, el.dataset.need === 'super' ? isSuper() : el.dataset.need === 'admin' ? isAdmin() : isStaff()));
+  const pendingCount = allOrgs.filter(o => orgStatus(o) === 'pending').length;
+  $('platformTab').textContent = pendingCount ? `Platform (${pendingCount})` : 'Platform';
+  const allowed = ['clock', 'sheet', 'settings'].concat(isStaff() ? ['people', 'map'] : [], isAdmin() ? ['teams'] : [], isSuper() ? ['platform'] : []);
   if (!allowed.includes(tab)) tab = 'clock';
   document.querySelectorAll('nav [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   setScreen('app');
   startWatch();
-  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap();
+  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap(); renderPlatform();
 }
+
+// ---------- Organisation awaiting / refused approval ----------
+$('deleteOrgReq').onclick = async () => {
+  if (!confirm(`Delete ${org.name}? This removes the request completely.`)) return;
+  try {
+    const b = writeBatch(db);
+    b.delete(doc(db, 'codes', org.code));
+    b.delete(orgRef('members', user.uid));
+    b.delete(orgRef());
+    b.delete(doc(db, 'users', user.uid, 'memberships', orgId));
+    await b.commit();
+  } catch (err) { alert(niceError(err)); }
+};
+$('leaveReviewOrg').onclick = () => leaveCurrentOrg(`Leave ${org?.name || 'this organisation'}?`);
+
+// ---------- Platform panel (Zurmelibble owner only) ----------
+async function loadOrgExtras(o) {
+  if (!(o.id in orgCounts)) {
+    orgCounts[o.id] = '…';
+    getCountFromServer(collection(db, 'orgs', o.id, 'members'))
+      .then(c => { orgCounts[o.id] = c.data().count; renderPlatform(); })
+      .catch(() => { orgCounts[o.id] = '?'; });
+  }
+  if (!o.ownerEmail && !(o.id in ownerInfo)) {
+    ownerInfo[o.id] = null;
+    getDoc(doc(db, 'orgs', o.id, 'members', o.ownerId))
+      .then(s => { ownerInfo[o.id] = s.data() || {}; renderPlatform(); }).catch(() => {});
+  }
+}
+function renderPlatform() {
+  if (!isSuper() || tab !== 'platform') return;
+  const by = st => allOrgs.filter(o => orgStatus(o) === st).length;
+  $('pfPending').textContent = by('pending'); $('pfApproved').textContent = by('approved'); $('pfRejected').textContent = by('rejected');
+  $('pfFilter').value = platformFilter;
+  const list = allOrgs.filter(o => platformFilter === 'all' || orgStatus(o) === platformFilter);
+  show($('pfEmpty'), !list.length);
+  $('pfEmpty').textContent = platformFilter === 'pending' ? 'No organisations waiting for approval.' : 'Nothing here.';
+  $('pfList').innerHTML = list.map(o => {
+    loadOrgExtras(o);
+    const st = orgStatus(o);
+    const ownerName = o.ownerName || ownerInfo[o.id]?.name || '';
+    const ownerEmail = o.ownerEmail || ownerInfo[o.id]?.email || '';
+    const badge = { pending: 's-pending', approved: 's-in', rejected: 's-out' }[st];
+    const actions = st === 'pending'
+      ? `<button class="b-in b-sm" data-pf="approve" data-id="${o.id}">Approve</button> <button class="b-ghost b-sm" data-pf="reject" data-id="${o.id}">Reject</button>`
+      : st === 'approved'
+        ? `<button class="b-ghost b-sm" data-pf="reject" data-id="${o.id}">Suspend</button>`
+        : `<button class="b-ghost b-sm" data-pf="approve" data-id="${o.id}">Approve</button>`;
+    return `<tr>
+      <td><b>${esc(o.name)}</b>${o.brand ? ' <span class="badge s-admin">' + esc(o.brand) + '</span>' : ''}</td>
+      <td>${esc(ownerName)}<br><span class="muted">${esc(ownerEmail)}</span></td>
+      <td>${o.createdAt ? fmtDate(o.createdAt) : ''}</td>
+      <td>${orgCounts[o.id] ?? '…'}</td>
+      <td><span class="badge ${badge}">${st === 'rejected' ? 'Rejected' : st === 'pending' ? 'Pending' : 'Approved'}</span></td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+}
+$('pfFilter').onchange = e => { platformFilter = e.target.value; renderPlatform(); };
+$('pfList').onclick = e => {
+  const b = e.target.closest('[data-pf]'); if (!b) return;
+  const o = allOrgs.find(x => x.id === b.dataset.id);
+  const status = b.dataset.pf === 'approve' ? 'approved' : 'rejected';
+  if (status === 'rejected' && !confirm(orgStatus(o) === 'approved'
+    ? `Suspend ${o.name}? Nobody in it will be able to clock in or join until you approve it again.`
+    : `Reject ${o.name}?`)) return;
+  safe(async () => {
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'orgs', o.id), { status, reviewedAt: Date.now() });
+    if (o.code) batch.update(doc(db, 'codes', o.code), { status });
+    await batch.commit();
+  });
+};
 
 // ---------- Work sites (admins) ----------
 let siteMap = null, siteLayer = null, sitePoint = null;
