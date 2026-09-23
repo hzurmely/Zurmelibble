@@ -131,13 +131,3 @@ html[data-brand="cefast"] .code { font-family: "Montserrat", sans-serif; font-we
 html[data-brand="cefast"] .err { color: #FF7A6E; }
 html[data-brand="cefast"] .ok { color: #7FD86F; }
 html[data-brand="cefast"] #map { border-radius: 24px; }
-
-/* Footer bar with the handle, as on every CEFAST Aerospace post */
-.brand-footer { display: none; }
-html[data-brand="cefast"] .brand-footer {
-  display: flex; justify-content: flex-end; align-items: center; gap: 12px;
-  max-width: 1000px; margin: 8px auto 0; padding: 18px 16px 28px;
-  text-transform: uppercase; letter-spacing: .14em; font-size: 11px; font-weight: 700; color: rgba(255,255,255,.55);
-}
-html[data-brand="cefast"] .brand-footer .handle { text-transform: none; letter-spacing: .02em; font-size: 13px; color: #fff; }
-html[data-brand="cefast"] .brand-footer .handle::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cf-sky); margin-right: 10px; vertical-align: 1px; }
