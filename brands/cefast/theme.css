@@ -1,0 +1,143 @@
+/* CEFAST Aerospace theme for Zurmelibble.
+   Tokens transcribed from the CEFAST Aerospace Design System (Manual de Marca).
+   Active when <html data-brand="cefast">. */
+
+@font-face { font-family: "Montserrat"; src: url("montserrat-regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("montserrat-medium.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("montserrat-semibold.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("montserrat-bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("montserrat-extrabold.woff2") format("woff2"); font-weight: 800; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("montserrat-black.woff2") format("woff2"); font-weight: 900; font-display: swap; }
+
+html[data-brand="cefast"] {
+  color-scheme: dark;
+  /* brand core */
+  --cf-blue-900: #07428A;   /* CEFAST Blue: solid actions */
+  --cf-blue-hover: #0A4F9F;
+  --cf-blue-press: #053569;
+  --cf-sky: #699DDB;        /* Sky: the accent voice */
+  --cf-sky-200: #A8C4E6;
+  --cf-space-950: #050D1A;
+  --cf-space-surface: #101F3A;
+  --cf-gold: #DB9616; --cf-red: #DB2616; --cf-green: #1D840D;
+  --cf-ease: cubic-bezier(.16,.84,.44,1);
+
+  /* map onto the app's variables */
+  --bg: var(--cf-space-950);
+  --card: rgba(255,255,255,.045);
+  --text: #FFFFFF;
+  --muted: rgba(255,255,255,.60);
+  --line: rgba(255,255,255,.10);
+  --accent: var(--cf-sky);
+  --in: var(--cf-green);
+  --out: var(--cf-red);
+  --brk: var(--cf-gold);
+}
+
+html[data-brand="cefast"] body {
+  font-family: "Montserrat", "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  color: rgba(255,255,255,.86);
+  background: var(--cf-space-950) url("fundo-16x9.jpg") center top / cover fixed no-repeat;
+  -webkit-font-smoothing: antialiased;
+}
+@media (orientation: portrait) {
+  html[data-brand="cefast"] body { background-image: url("fundo-9x16.jpg"); }
+}
+html[data-brand="cefast"] ::selection { background: var(--cf-sky); color: var(--cf-space-950); }
+html[data-brand="cefast"] *:focus-visible { outline: 2px solid var(--cf-sky); outline-offset: 2px; }
+
+/* Brand lock-up replaces the generic wordmark */
+.brand-logo { display: none; }
+html[data-brand="cefast"] .brand-logo { display: block; height: 34px; width: auto; }
+html[data-brand="cefast"] .brand-default { display: none; }
+html[data-brand="cefast"] .auth .brand-logo { height: 64px; margin: 4px 0 18px; }
+
+/* Header and tabs: flat deep navy bars, caps with wide tracking */
+html[data-brand="cefast"] header,
+html[data-brand="cefast"] nav { background: rgba(5,13,26,.92); border-color: var(--line); backdrop-filter: blur(14px); }
+html[data-brand="cefast"] nav button, html[data-brand="cefast"] nav button:hover:not(:disabled) {
+  background: transparent; box-shadow: none;
+  text-transform: uppercase; letter-spacing: .12em; font-size: 12px; font-weight: 700;
+  border-radius: 999px; padding: 9px 16px; color: rgba(255,255,255,.6);
+}
+html[data-brand="cefast"] nav button:hover:not(:disabled) { color: #fff; }
+html[data-brand="cefast"] nav button.active, html[data-brand="cefast"] nav button.active:hover { background: rgba(105,157,219,.14); color: var(--cf-sky); box-shadow: inset 0 0 0 1px rgba(105,157,219,.38); }
+html[data-brand="cefast"] .who b { font-weight: 700; }
+html[data-brand="cefast"] .who button { white-space: nowrap; padding: 7px 14px; font-size: 11px; }
+@media (max-width: 560px) { html[data-brand="cefast"] #meRole { display: none; } html[data-brand="cefast"] .brand-logo { height: 28px; } }
+
+/* Surfaces: 24px radius, translucent fill, hairline border, no shadow on the star field */
+html[data-brand="cefast"] .card { border-radius: 24px; background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.10); padding: 28px; }
+html[data-brand="cefast"] .auth.card { padding: 32px; }
+html[data-brand="cefast"] .stat { border-radius: 16px; background: rgba(255,255,255,.03); }
+html[data-brand="cefast"] .stat small { text-transform: uppercase; letter-spacing: .14em; font-size: 11px; font-weight: 700; }
+html[data-brand="cefast"] .stat b { font-weight: 800; font-size: 26px; color: #fff; }
+
+/* Eyebrow style for card titles: Sky, caps, wide tracking */
+html[data-brand="cefast"] .card h2 {
+  color: var(--cf-sky); text-transform: uppercase; letter-spacing: .24em; font-size: 13px; font-weight: 700;
+}
+html[data-brand="cefast"] #authTitle { text-transform: uppercase; letter-spacing: .24em; font-size: 12px; font-weight: 700; color: var(--cf-sky); }
+
+/* Buttons: capsules, caps, CEFAST Blue fill */
+html[data-brand="cefast"] button {
+  border-radius: 999px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; font-size: 13px;
+  background: var(--cf-blue-900); transition: background 140ms var(--cf-ease), box-shadow 140ms var(--cf-ease), transform 140ms var(--cf-ease);
+}
+html[data-brand="cefast"] button:not(.b-in):not(.b-out):not(.b-brk):not(.b-ghost):hover:not(:disabled) { background: var(--cf-blue-hover); box-shadow: 0 0 0 1px rgba(105,157,219,.35), 0 12px 40px rgba(105,157,219,.18); }
+html[data-brand="cefast"] button:not(.b-in):not(.b-out):not(.b-brk):not(.b-ghost):active:not(:disabled) { background: var(--cf-blue-press); }
+html[data-brand="cefast"] button:active:not(:disabled) { transform: scale(.98); }
+html[data-brand="cefast"] button:disabled { opacity: .4; }
+html[data-brand="cefast"] .b-in { background: var(--cf-green); }
+html[data-brand="cefast"] .b-out { background: var(--cf-red); }
+html[data-brand="cefast"] .b-brk { background: var(--cf-gold); }
+html[data-brand="cefast"] .b-in:hover:not(:disabled), html[data-brand="cefast"] .b-out:hover:not(:disabled), html[data-brand="cefast"] .b-brk:hover:not(:disabled) { filter: brightness(1.12); }
+html[data-brand="cefast"] .b-ghost { background: transparent; color: rgba(255,255,255,.75); border: 1px solid rgba(255,255,255,.18); }
+html[data-brand="cefast"] .b-ghost:hover:not(:disabled) { background: rgba(255,255,255,.06); color: #fff; }
+html[data-brand="cefast"] .auth .switch, html[data-brand="cefast"] .pass button { background: transparent; box-shadow: none; }
+html[data-brand="cefast"] .auth .switch { color: var(--cf-sky); letter-spacing: .12em; font-size: 11px; }
+html[data-brand="cefast"] .pass button:hover { background: transparent !important; box-shadow: none !important; }
+
+/* Forms: 16px fields on translucent fill */
+html[data-brand="cefast"] input, html[data-brand="cefast"] select {
+  font-family: inherit; border-radius: 16px; background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.14); color: #fff;
+}
+html[data-brand="cefast"] select option { background: var(--cf-space-surface); color: #fff; }
+html[data-brand="cefast"] input::placeholder { color: rgba(255,255,255,.45); }
+html[data-brand="cefast"] input:focus, html[data-brand="cefast"] select:focus { border-color: rgba(105,157,219,.6); outline: none; box-shadow: 0 0 0 3px rgba(105,157,219,.18); }
+html[data-brand="cefast"] td select { border-radius: 8px; }
+html[data-brand="cefast"] .toggle span { background: rgba(255,255,255,.16); }
+html[data-brand="cefast"] .toggle input:checked + span { background: var(--cf-blue-900); box-shadow: inset 0 0 0 1px rgba(105,157,219,.5); }
+
+/* Badges: capsule pills, caps; status colours only for status */
+html[data-brand="cefast"] .badge { text-transform: uppercase; letter-spacing: .12em; font-size: 10.5px; font-weight: 700; padding: 5px 11px; }
+html[data-brand="cefast"] .s-in { background: rgba(29,132,13,.22); color: #7FD86F; }
+html[data-brand="cefast"] .s-brk, html[data-brand="cefast"] .s-pending { background: rgba(219,150,22,.18); color: #F2C16A; }
+html[data-brand="cefast"] .s-out { background: rgba(255,255,255,.08); color: rgba(255,255,255,.65); }
+html[data-brand="cefast"] .s-admin { background: rgba(105,157,219,.14); color: var(--cf-sky); box-shadow: inset 0 0 0 1px rgba(105,157,219,.38); }
+html[data-brand="cefast"] .s-mgr { background: rgba(7,66,138,.5); color: var(--cf-sky-200); }
+
+/* Clock: display type, uppercase, tight tracking */
+html[data-brand="cefast"] .bigtime { font-weight: 900; font-size: 64px; letter-spacing: -0.02em; color: #fff; }
+html[data-brand="cefast"] .clock-actions button { padding: 16px 30px; font-size: 14px; letter-spacing: .12em; }
+html[data-brand="cefast"] .orgline { text-transform: uppercase; letter-spacing: .24em; font-size: 12px; font-weight: 700; color: var(--cf-sky); }
+
+/* Tables: meta caps headers, hairlines */
+html[data-brand="cefast"] th { text-transform: uppercase; letter-spacing: .14em; font-size: 11px; font-weight: 700; color: rgba(255,255,255,.5); }
+html[data-brand="cefast"] td { border-color: rgba(255,255,255,.08); }
+html[data-brand="cefast"] td a { color: var(--cf-sky); }
+html[data-brand="cefast"] .code { font-family: "Montserrat", sans-serif; font-weight: 900; letter-spacing: .18em; color: #fff; border: 1px solid rgba(105,157,219,.38); background: rgba(105,157,219,.10); border-radius: 16px; }
+html[data-brand="cefast"] .err { color: #FF7A6E; }
+html[data-brand="cefast"] .ok { color: #7FD86F; }
+html[data-brand="cefast"] #map { border-radius: 24px; }
+
+/* Footer bar with the handle, as on every CEFAST Aerospace post */
+.brand-footer { display: none; }
+html[data-brand="cefast"] .brand-footer {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  max-width: 1000px; margin: 8px auto 0; padding: 18px 16px 28px;
+  text-transform: uppercase; letter-spacing: .14em; font-size: 11px; font-weight: 700; color: rgba(255,255,255,.55);
+}
+html[data-brand="cefast"] .brand-footer .handle { text-transform: none; letter-spacing: .02em; font-size: 13px; color: #fff; }
+html[data-brand="cefast"] .brand-footer .handle::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cf-sky); margin-right: 10px; vertical-align: 1px; }
