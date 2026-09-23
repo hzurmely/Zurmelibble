@@ -54,6 +54,10 @@ const SUPER_UID = 'dreUCmV8iBcaauMuOVHIv4IlxqG3';
 const isSuper = () => user?.uid === SUPER_UID;
 const orgStatus = o => o?.status || 'approved';
 let allOrgs = [], orgCounts = {}, ownerInfo = {}, platformFilter = 'pending';
+// The owner sees "Zurmelibble" in the organisation switcher; picking it opens the platform panel.
+let platformMode = false;
+try { platformMode = localStorage.getItem('zb-platform') === '1'; } catch (e) {}
+function setPlatformMode(on) { platformMode = on; try { on ? localStorage.setItem('zb-platform', '1') : localStorage.removeItem('zb-platform'); } catch (e) {} }
 const isActive = () => ['owner', 'admin', 'manager', 'member'].includes(role());
 const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', manager: 'Manager', member: 'Member', pending: 'Pending' };
 const sameDay = (ts, d = new Date()) => new Date(ts).toDateString() === d.toDateString();
@@ -311,21 +315,27 @@ function setScreen(name) {
   show($('onboardView'), name === 'onboard');
   show($('pendingView'), name === 'pending');
   show($('reviewView'), name === 'review');
+  show($('platformView'), name === 'platform');
   show($('tabs'), name === 'app');
   document.querySelectorAll('[data-view]').forEach(v => show(v, name === 'app' && v.dataset.view === tab));
 }
 
 function renderSwitcher() {
   const sel = $('orgSwitch');
-  sel.innerHTML = memberships.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('') +
+  const pendingCount = allOrgs.filter(o => orgStatus(o) === 'pending').length;
+  sel.innerHTML = (isSuper() ? `<option value="__platform">Zurmelibble${pendingCount ? ` (${pendingCount} waiting)` : ''}</option>` : '') +
+    memberships.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('') +
     '<option value="__new">＋ Create or join…</option>';
-  sel.value = orgId && memberships.some(m => m.id === orgId) ? orgId : '__new';
-  show(sel, memberships.length > 0);
+  sel.value = platformMode && isSuper() ? '__platform' : orgId && memberships.some(m => m.id === orgId) ? orgId : '__new';
+  show(sel, memberships.length > 0 || isSuper());
 }
 $('orgSwitch').onchange = async e => {
   const v = e.target.value;
+  if (v === '__platform') { setPlatformMode(true); onboarding = false; render(); return; }
+  setPlatformMode(false);
   if (v === '__new') { onboarding = true; render(); return; }
   onboarding = false;
+  if (v === orgId) { render(); return; }
   await updateDoc(doc(db, 'users', user.uid), { currentOrg: v });
 };
 
@@ -696,7 +706,7 @@ function renderMap() {
 // Organisation branding (e.g. CEFAST Aerospace). Set by the project owner on orgs/{id}.brand.
 const BRANDS = ['cefast'];
 function applyBrand() {
-  const b = !onboarding && org && BRANDS.includes(org.brand) ? org.brand : '';
+  const b = !onboarding && !(platformMode && isSuper()) && org && BRANDS.includes(org.brand) ? org.brand : '';
   if ((document.documentElement.dataset.brand || '') !== b) {
     if (b) document.documentElement.dataset.brand = b; else delete document.documentElement.dataset.brand;
     if (map) setTimeout(() => map.invalidateSize(), 0);
@@ -707,11 +717,15 @@ function applyBrand() {
 function render() {
   if (!user || !profile) return;
   renderSwitcher();
-  if (org || onboarding || !orgId) applyBrand();
+  if (org || onboarding || !orgId || platformMode) applyBrand();
   // Header role badge
   show($('meRole'), !!role() && role() !== 'member' && !onboarding);
   $('meRole').textContent = ROLE_LABEL[role()] || '';
   // Which screen?
+  if (platformMode && isSuper()) {
+    show($('meRole'), false);
+    setScreen('platform'); renderPlatform(); return;
+  }
   if (onboarding || (!orgId && memberships.length === 0)) {
     if (pendingJoin && !$('joinCode').value) $('joinCode').value = pendingJoin;
     show($('onboardCancel'), memberships.length > 0);
@@ -722,7 +736,7 @@ function render() {
     $('pendingOrg').textContent = org?.name || memberships.find(m => m.id === orgId)?.name || 'the organisation';
     setScreen('pending'); return;
   }
-  if (org && orgStatus(org) !== 'approved' && tab !== 'platform') {
+  if (org && orgStatus(org) !== 'approved') {
     const st = orgStatus(org), owner = role() === 'owner';
     $('reviewTitle').textContent = st === 'pending' ? 'Waiting for approval' : 'Not approved';
     $('reviewText').textContent = st === 'pending'
@@ -733,14 +747,12 @@ function render() {
     setScreen('review'); return;
   }
   document.querySelectorAll('[data-need]').forEach(el => show(el, el.dataset.need === 'super' ? isSuper() : el.dataset.need === 'admin' ? isAdmin() : isStaff()));
-  const pendingCount = allOrgs.filter(o => orgStatus(o) === 'pending').length;
-  $('platformTab').textContent = pendingCount ? `Platform (${pendingCount})` : 'Platform';
-  const allowed = ['clock', 'sheet', 'settings'].concat(isStaff() ? ['people', 'map'] : [], isAdmin() ? ['teams'] : [], isSuper() ? ['platform'] : []);
+  const allowed = ['clock', 'sheet', 'settings'].concat(isStaff() ? ['people', 'map'] : [], isAdmin() ? ['teams'] : []);
   if (!allowed.includes(tab)) tab = 'clock';
   document.querySelectorAll('nav [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   setScreen('app');
   startWatch();
-  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap(); renderPlatform();
+  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap();
 }
 
 // ---------- Organisation awaiting / refused approval ----------
@@ -772,7 +784,7 @@ async function loadOrgExtras(o) {
   }
 }
 function renderPlatform() {
-  if (!isSuper() || tab !== 'platform') return;
+  if (!isSuper() || !platformMode) return;
   const by = st => allOrgs.filter(o => orgStatus(o) === st).length;
   $('pfPending').textContent = by('pending'); $('pfApproved').textContent = by('approved'); $('pfRejected').textContent = by('rejected');
   $('pfFilter').value = platformFilter;
