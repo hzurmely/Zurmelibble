@@ -22,7 +22,8 @@
   [hidden] { display: none !important; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; padding-top: calc(14px + env(safe-area-inset-top)); background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 1000; }
   header h1 { margin: 0; font-size: 20px; white-space: nowrap; }
-  header h1 span { color: var(--accent); }
+  header h1 { display: flex; align-items: center; }
+  header h1 .brand-default > span { color: var(--accent); }
   .who { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); min-width: 0; }
   .who b { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   nav { display: flex; gap: 4px; padding: 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); overflow-x: auto; }
@@ -53,6 +54,9 @@
   .pass input { padding-right: 48px; }
   .pass button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: transparent; color: var(--muted); padding: 6px 10px; font-size: 18px; line-height: 1; }
   .pass button.on { color: var(--accent); }
+  .pass button svg { display: block; }
+  .pass .i-eyeoff, .pass button.on .i-eye { display: none; }
+  .pass button.on .i-eyeoff { display: block; }
   .auth .switch { background: none; color: var(--accent); padding: 4px; font-weight: 500; }
 
   /* Clock */
@@ -92,6 +96,11 @@
   .orgline { color: var(--muted); font-size: 14px; }
   @media (max-width: 560px) { #meName { display: none; } header h1 { font-size: 17px; } .who select { max-width: 140px; } }
 </style>
+<link rel="stylesheet" href="brands/cefast/theme.css">
+<script>
+  // Apply the last used organisation brand before first paint (also ?brand=cefast from invite links).
+  try { const q = new URLSearchParams(location.search).get("brand"); const b = q || localStorage.getItem("zb-brand"); if (b) document.documentElement.dataset.brand = b; } catch (e) {}
+</script>
 </head>
 <body>
 
@@ -103,14 +112,15 @@
 
 <!-- Auth -->
 <section id="authView" class="card auth" hidden>
-  <h1 style="margin:0 0 6px;font-size:24px">⏱ <span style="color:var(--accent)">Zurmel</span>ibble</h1>
+  <img class="brand-logo" src="brands/cefast/logo-white.svg" alt="CEFAST Aerospace">
+  <h1 class="brand-default" style="margin:0 0 6px;font-size:24px">⏱ <span style="color:var(--accent)">Zurmel</span>ibble</h1>
   <p class="muted" id="authTitle" style="margin:0 0 14px">Sign in to clock in</p>
   <form id="authForm">
     <input id="authName" placeholder="Your name" autocomplete="name" hidden>
     <input id="authEmail" type="email" placeholder="Email" autocomplete="email" required>
     <div class="pass">
       <input id="authPass" type="password" placeholder="Password (6+ characters)" autocomplete="current-password" required minlength="6">
-      <button type="button" id="togglePass" aria-label="Show password" title="Show password">👁</button>
+      <button type="button" id="togglePass" aria-label="Show password" title="Show password"><svg class="i-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="i-eyeoff" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-2.2 3.2"/><path d="M6.6 6.6A17 17 0 0 0 2 12s3.5 8 10 8a10 10 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="m2 2 20 20"/></svg></button>
     </div>
     <button type="submit" id="authSubmit">Sign in</button>
     <div class="err" id="authErr"></div>
@@ -124,7 +134,7 @@
 <!-- App -->
 <div id="appView" hidden>
   <header>
-    <h1>⏱ <span>Zurmel</span>ibble</h1>
+    <h1><img class="brand-logo" src="brands/cefast/logo-white.svg" alt="CEFAST Aerospace"><span class="brand-default">⏱ <span>Zurmel</span>ibble</span></h1>
     <div class="who">
       <select id="orgSwitch" title="Switch organisation" hidden></select>
       <b id="meName"></b><span id="meRole" class="badge s-admin" hidden></span>
@@ -303,6 +313,7 @@
       </div>
     </section>
   </main>
+  <footer class="brand-footer"><span class="handle">@cefastaerospace</span><span>Controle de ponto</span></footer>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>

@@ -13,6 +13,7 @@ A simple Jibble style time tracking app. Runs on the web (GitHub Pages) and on A
 * Clock in, clock out and breaks, with a live timer
 * GPS location saved on every clock in and clock out, shown on a map
 * Timesheets filtered by team, person and date, plus CSV export
+* Organisation branding: the CEFAST Aerospace organisation uses its own design system (`brands/cefast/`), switched on by setting `brand: "cefast"` on the organisation in Firestore
 
 ## Links
 

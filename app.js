@@ -111,7 +111,6 @@ $('togglePass').onclick = () => {
   const showing = input.type === 'text';
   input.type = showing ? 'password' : 'text';
   btn.classList.toggle('on', !showing);
-  btn.textContent = showing ? '👁' : '🙈';
   btn.title = btn.ariaLabel = showing ? 'Show password' : 'Hide password';
   input.focus();
 };
@@ -528,7 +527,7 @@ function renderSettings() {
   $('requireApproval').checked = !!org.requireApproval;
   if (document.activeElement !== $('orgNameInput')) $('orgNameInput').value = org.name;
 }
-const inviteLink = () => `${location.origin}${location.pathname}?join=${org.code}`;
+const inviteLink = () => `${location.origin}${location.pathname}?join=${org.code}${org.brand ? '&brand=' + org.brand : ''}`;
 $('copyInvite').onclick = async () => {
   const text = `Join ${org.name} on Zurmelibble: ${inviteLink()}\nInvite code: ${org.code}`;
   try { await navigator.clipboard.writeText(text); $('inviteMsg').textContent = 'Invite message copied. Paste it in WhatsApp or email.'; }
@@ -592,9 +591,21 @@ function renderMap() {
   if (pts.length) map.fitBounds(pts, { padding: [30, 30], maxZoom: 16 });
 }
 
+// Organisation branding (e.g. CEFAST Aerospace). Set by the project owner on orgs/{id}.brand.
+const BRANDS = ['cefast'];
+function applyBrand() {
+  const b = !onboarding && org && BRANDS.includes(org.brand) ? org.brand : '';
+  if ((document.documentElement.dataset.brand || '') !== b) {
+    if (b) document.documentElement.dataset.brand = b; else delete document.documentElement.dataset.brand;
+    if (map) setTimeout(() => map.invalidateSize(), 0);
+  }
+  try { b ? localStorage.setItem('zb-brand', b) : localStorage.removeItem('zb-brand'); } catch (e) {}
+}
+
 function render() {
   if (!user || !profile) return;
   renderSwitcher();
+  if (org || onboarding || !orgId) applyBrand();
   // Header role badge
   show($('meRole'), !!role() && role() !== 'member' && !onboarding);
   $('meRole').textContent = ROLE_LABEL[role()] || '';
