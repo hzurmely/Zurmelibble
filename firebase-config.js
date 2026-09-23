@@ -1,10 +1,8 @@
-// Paste your Firebase web app config here (Firebase console → Project settings → Your apps → Web app).
-// These values are safe to publish; access is protected by firestore.rules.
 export const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyDbzSl4XL5c27Xv2tNKoeF0jzxr7C81Rjs",
+  authDomain: "zurmelibble.firebaseapp.com",
+  projectId: "zurmelibble",
+  storageBucket: "zurmelibble.firebasestorage.app",
+  messagingSenderId: "852397942973",
+  appId: "1:852397942973:web:84f05268be747e840dafd4"
 };
