@@ -69,6 +69,15 @@ function setAuthMode(up) {
   $('authPass').autocomplete = up ? 'new-password' : 'current-password';
   $('authErr').textContent = '';
 }
+$('togglePass').onclick = () => {
+  const input = $('authPass'), btn = $('togglePass');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.classList.toggle('on', !showing);
+  btn.textContent = showing ? '👁' : '🙈';
+  btn.title = btn.ariaLabel = showing ? 'Show password' : 'Hide password';
+  input.focus();
+};
 $('authToggle').onclick = () => setAuthMode(!signingUp);
 $('authReset').onclick = async () => {
   const email = $('authEmail').value.trim();

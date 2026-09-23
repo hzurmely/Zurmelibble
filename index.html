@@ -49,6 +49,10 @@
   /* Auth */
   .auth { max-width: 380px; margin: 60px auto; }
   .auth form { display: grid; gap: 10px; }
+  .pass { position: relative; display: grid; }
+  .pass input { padding-right: 48px; }
+  .pass button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: transparent; color: var(--muted); padding: 6px 10px; font-size: 18px; line-height: 1; }
+  .pass button.on { color: var(--accent); }
   .auth .switch { background: none; color: var(--accent); padding: 4px; font-weight: 500; }
 
   /* Clock */
@@ -86,7 +90,10 @@
   <form id="authForm">
     <input id="authName" placeholder="Your name" autocomplete="name" hidden>
     <input id="authEmail" type="email" placeholder="Email" autocomplete="email" required>
-    <input id="authPass" type="password" placeholder="Password (6+ characters)" autocomplete="current-password" required minlength="6">
+    <div class="pass">
+      <input id="authPass" type="password" placeholder="Password (6+ characters)" autocomplete="current-password" required minlength="6">
+      <button type="button" id="togglePass" aria-label="Show password" title="Show password">👁</button>
+    </div>
     <button type="submit" id="authSubmit">Sign in</button>
     <div class="err" id="authErr"></div>
   </form>
