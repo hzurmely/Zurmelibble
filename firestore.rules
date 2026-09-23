@@ -1,26 +1,86 @@
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function me() { return /databases/$(database)/documents/users/$(request.auth.uid); }
-    function isAdmin() { return signedIn() && exists(me()) && get(me()).data.role == 'admin'; }
+  match /databases/{db}/documents {
 
-    // User profiles. Everyone starts as 'member'; only admins can change roles.
-    match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.role == 'member';
-      allow update: if isAdmin()
-        || (signedIn() && request.auth.uid == uid && request.resource.data.role == resource.data.role);
-      allow delete: if isAdmin();
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function orgPath(org) { return /databases/$(db)/documents/orgs/$(org); }
+    function memberPath(org, u) { return /databases/$(db)/documents/orgs/$(org)/members/$(u); }
+    function myMember(org) { return get(memberPath(org, uid())).data; }
+    function hasRole(org, roles) { return signedIn() && exists(memberPath(org, uid())) && myMember(org).role in roles; }
+    function isMember(org) { return hasRole(org, ['owner', 'admin', 'manager', 'member']); }
+    function isAdmin(org) { return hasRole(org, ['owner', 'admin']); }
+    // Managers manage the team they belong to.
+    function managesTeam(org, teamId) {
+      return hasRole(org, ['manager']) && myMember(org).teamId != null && teamId == myMember(org).teamId;
     }
 
-    // Shifts. Members see and write their own; admins see and manage all.
-    match /shifts/{id} {
-      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
-      allow update: if isAdmin()
-        || (signedIn() && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid);
-      allow delete: if isAdmin();
+    // Personal profile and the list of organisations I belong to (for the switcher).
+    match /users/{u} {
+      allow read, write: if signedIn() && uid() == u;
+      match /memberships/{org} {
+        allow read, write: if signedIn() && uid() == u;
+      }
+    }
+
+    // Invite codes: anyone signed in can look up a code they know, nobody can list them.
+    match /codes/{code} {
+      allow get: if signedIn();
+      allow create: if signedIn()
+        && getAfter(memberPath(request.resource.data.orgId, uid())).data.role in ['owner', 'admin'];
+      allow update: if isAdmin(resource.data.orgId) && request.resource.data.orgId == resource.data.orgId;
+      allow delete: if isAdmin(resource.data.orgId);
+    }
+
+    match /orgs/{org} {
+      allow get: if hasRole(org, ['owner', 'admin', 'manager', 'member', 'pending']);
+      allow create: if signedIn() && request.resource.data.ownerId == uid();
+      allow update: if isAdmin(org) && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if hasRole(org, ['owner']);
+
+      match /members/{m} {
+        allow get: if signedIn() && (uid() == m || isAdmin(org) || managesTeam(org, resource.data.teamId));
+        allow list: if isAdmin(org) || managesTeam(org, resource.data.teamId);
+
+        allow create: if signedIn() && uid() == m && request.resource.data.uid == m && (
+          // Founder: the organisation is being created in the same batch.
+          (request.resource.data.role == 'owner'
+            && !exists(orgPath(org))
+            && getAfter(orgPath(org)).data.ownerId == uid())
+          ||
+          // Joining with a valid invite code.
+          (request.resource.data.teamId == null
+            && exists(/databases/$(db)/documents/codes/$(request.resource.data.code))
+            && get(/databases/$(db)/documents/codes/$(request.resource.data.code)).data.orgId == org
+            && request.resource.data.role == (get(orgPath(org)).data.requireApproval == true ? 'pending' : 'member'))
+        );
+
+        allow update: if
+          (isAdmin(org)
+            && request.resource.data.uid == resource.data.uid
+            && (resource.data.role != 'owner' || (hasRole(org, ['owner']) && request.resource.data.role == 'owner'))
+            && (request.resource.data.role != 'owner' || resource.data.role == 'owner'))
+          || (signedIn() && uid() == m && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']));
+
+        allow delete: if resource.data.role != 'owner' && (isAdmin(org) || (signedIn() && uid() == m));
+      }
+
+      match /teams/{t} {
+        allow read: if isMember(org);
+        allow write: if isAdmin(org);
+      }
+
+      match /shifts/{s} {
+        allow read: if signedIn() && (resource.data.uid == uid() || isAdmin(org) || managesTeam(org, resource.data.teamId));
+        allow create: if isMember(org)
+          && request.resource.data.uid == uid()
+          && request.resource.data.teamId == myMember(org).teamId;
+        allow update: if isAdmin(org) || managesTeam(org, resource.data.teamId)
+          || (isMember(org) && resource.data.uid == uid()
+              && request.resource.data.uid == uid()
+              && request.resource.data.teamId == resource.data.teamId);
+        allow delete: if isAdmin(org) || managesTeam(org, resource.data.teamId);
+      }
     }
   }
 }

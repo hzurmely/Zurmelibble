@@ -4,12 +4,15 @@ A simple Jibble style time tracking app. Runs on the web (GitHub Pages) and on A
 
 ## Features
 
-* Accounts with email and password
+* Accounts with email and password (with a show password button)
+* Organisations: anyone can create one; people join with an invite code or link
+* Optional "require approval" so admins approve new people first
+* Teams inside each organisation
+* Roles: Owner, Admin, Manager (sees their own team), Member (sees only themselves)
+* Switch between several organisations from the header
 * Clock in, clock out and breaks, with a live timer
-* GPS location saved on every clock in and clock out
-* Admins see the whole team live, everyone's timesheets, and a map of clock in/out locations
-* Admins can promote other people to admin
-* Timesheet filters by person and date, plus CSV export
+* GPS location saved on every clock in and clock out, shown on a map
+* Timesheets filtered by team, person and date, plus CSV export
 
 ## Links
 
@@ -24,8 +27,8 @@ A simple Jibble style time tracking app. Runs on the web (GitHub Pages) and on A
 4. In Firestore, open the **Rules** tab, paste the contents of `firestore.rules`, and publish.
 5. **Project settings → Your apps → Web (</>)**, register an app, and copy the config into `firebase-config.js`.
 6. **Authentication → Settings → Authorized domains**: add `hzurmely.github.io` (`localhost` is already there, which the APK uses).
-7. Open the app and create your account. Then, in Firestore, open `users → (your user)` and change `role` from `member` to `admin`. From then on you can make other admins from the Team tab.
+7. Open the app, create your account, then create your organisation. You become its Owner.
 
 ## How people join
 
-Each person installs the APK (or opens the web link) and creates an account. They show up in the Team tab for admins.
+In **Settings**, copy the invite message and send it. People install the APK (or open the link), create an account and enter the code. Put them in a team and pick their role in the **People** tab.
