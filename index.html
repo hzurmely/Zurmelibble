@@ -29,7 +29,37 @@
   nav { display: flex; gap: 4px; padding: 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); overflow-x: auto; }
   nav button { background: transparent; color: var(--muted); font-weight: 500; padding: 8px 14px; }
   nav button.active { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
-  main { max-width: 1000px; margin: 0 auto; padding: 20px 16px; display: grid; gap: 16px; }
+  main { max-width: 1000px; margin: 0 auto; padding: 20px 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  main > section, .card, .grid2 > * { min-width: 0; }
+  html, body { overflow-x: hidden; }
+  /* Phones: tables become stacked cards, filters go full width */
+  @media (max-width: 640px) {
+    main { padding: 14px 12px; }
+    .card { padding: 16px; }
+    main .filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+    main .stats { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+    .stat { padding: 12px; }
+    .filters > select, .filters > button { grid-column: 1 / -1; width: 100%; }
+    .filters > select[hidden] { display: none; }
+    .filters label { display: grid; gap: 4px; }
+    .filters label { min-width: 0; }
+    .filters label input { width: 100%; min-width: 0; }
+    .table-wrap { overflow: visible; }
+    table.rtable, table.rtable tbody { display: block; width: 100%; }
+    table.rtable thead { display: none; }
+    table.rtable tr { display: block; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    table.rtable tr:last-child { border-bottom: 0; }
+    table.rtable td { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 5px 0; border: 0; white-space: normal; text-align: right; }
+    table.rtable td.empty { display: none; }
+    table.rtable td > .cv { min-width: 0; }
+    table.rtable td::before { content: attr(data-label); color: var(--muted); font-size: 12px; text-align: left; flex: none; }
+    table.rtable td[data-label=""]::before { content: none; }
+    table.rtable td[data-label=""] { justify-content: flex-end; }
+    table.rtable td:first-child { display: block; text-align: left; font-size: 16px; font-weight: 700; padding-bottom: 8px; }
+    table.rtable td:first-child::before { content: none; }
+    table.rtable td select { max-width: 60%; }
+    #siteMap { height: 260px; }
+  }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
   .card h2 { margin: 0 0 14px; font-size: 16px; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -216,7 +246,7 @@
           </select>
         </div>
         <div class="table-wrap">
-          <table>
+          <table class="rtable">
             <thead><tr><th>Organisation</th><th>Owner</th><th>Created</th><th>People</th><th>Status</th><th></th></tr></thead>
             <tbody id="pfList"></tbody>
           </table>
@@ -242,7 +272,7 @@
     <section data-view="sheet" hidden>
       <div class="card">
         <h2>Timesheets</h2>
-        <div class="row" style="margin-bottom:12px">
+        <div class="row filters" style="margin-bottom:12px">
           <select id="fTeam" data-need="admin" hidden><option value="">All teams</option></select>
           <select id="fPerson" data-need="staff" hidden><option value="">Everyone</option></select>
           <label class="muted">From <input type="date" id="fFrom"></label>
@@ -255,7 +285,7 @@
           <div class="stat"><small>Total breaks</small><b id="sBreaks">0h 00m</b></div>
         </div>
         <div class="table-wrap">
-          <table>
+          <table class="rtable">
             <thead><tr><th>Member</th><th>Team</th><th>Date</th><th>In</th><th>Out</th><th>Breaks</th><th>Worked</th><th>Location</th><th data-need="staff" hidden></th></tr></thead>
             <tbody id="sheet"></tbody>
           </table>
@@ -277,14 +307,14 @@
       <div class="card" id="pendingCard" style="margin-top:16px" hidden>
         <h2>Waiting for approval</h2>
         <div class="table-wrap">
-          <table><thead><tr><th>Name</th><th>Team</th><th></th></tr></thead><tbody id="pendingList"></tbody></table>
+          <table class="rtable"><thead><tr><th>Name</th><th>Team</th><th></th></tr></thead><tbody id="pendingList"></tbody></table>
         </div>
       </div>
       <div class="card" style="margin-top:16px">
         <h2>People</h2>
         <p class="muted" style="margin-top:-6px" id="peopleHint"></p>
         <div class="table-wrap">
-          <table>
+          <table class="rtable">
             <thead><tr><th>Name</th><th>Status</th><th>Since</th><th>Today</th><th>Team</th><th>Role</th><th></th></tr></thead>
             <tbody id="people"></tbody>
           </table>
@@ -301,7 +331,7 @@
           <button type="submit">Add team</button>
         </form>
         <div class="table-wrap">
-          <table>
+          <table class="rtable">
             <thead><tr><th>Team</th><th>People</th><th>Managers</th><th>Working now</th><th></th></tr></thead>
             <tbody id="teamList"></tbody>
           </table>
@@ -358,7 +388,7 @@
             <button type="submit">Add site</button>
           </form>
           <div class="err" id="siteErr"></div>
-          <div class="table-wrap"><table><tbody id="siteList"></tbody></table></div>
+          <div class="table-wrap"><table class="rtable"><tbody id="siteList"></tbody></table></div>
           <p class="muted" id="sitesEmpty" style="margin:0">No work sites yet.</p>
         </div>
         <div class="card stack">

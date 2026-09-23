@@ -448,6 +448,16 @@ async function act(kind) {
 $('myActions').onclick = e => { const b = e.target.closest('[data-act]'); if (b) act(b.dataset.act); };
 
 // ---------- Rendering ----------
+// Copy each column header onto its cells so tables can stack as cards on phones.
+function labelCells(tbody) {
+  const ths = [...(tbody.closest('table').querySelectorAll('thead th'))].map(t => t.textContent.trim());
+  tbody.querySelectorAll('tr').forEach(tr => [...tr.children].forEach((td, i) => {
+    td.dataset.label = ths[i] || '';
+    // Keep a cell's contents together (e.g. time + "auto" badge) when stacked on phones.
+    if (td.childNodes.length > 1) td.innerHTML = `<span class="cv">${td.innerHTML}</span>`;
+    td.classList.toggle('empty', !td.textContent.trim() && !td.querySelector('select, button, input'));
+  }));
+}
 function renderClock() {
   if (!myMember || !isActive()) return;
   $('clockOrg').textContent = `${org?.name || ''}${myMember.teamId ? ' · ' + teamName(myMember.teamId) : ''}`;
@@ -494,7 +504,7 @@ function renderSheet() {
     <td>${fmtDur(breakMs(s))}</td><td><b>${fmtDur(workedMs(s))}</b></td>
     <td>${s.siteName ? esc(s.siteName) + '<br>' : ''}${mapsLink(s.inLoc)}</td>
     ${isStaff() ? `<td><button class="b-ghost b-sm" data-del="${s.id}">Delete</button></td>` : ''}
-  </tr>`).join('');
+  </tr>`).join(''); labelCells($('sheet'));
 }
 $('sheet').onclick = async e => {
   const b = e.target.closest('[data-del]'); if (!b) return;
@@ -536,7 +546,7 @@ function renderPeople() {
     <td><b>${esc(m.name)}</b><br><span class="muted">${esc(m.email)}</span></td>
     <td><select data-pteam="${m.uid}">${teamOptions(null)}</select></td>
     <td><button class="b-in b-sm" data-approve="${m.uid}">Approve</button> <button class="b-ghost b-sm" data-reject="${m.uid}">Reject</button></td>
-  </tr>`).join('');
+  </tr>`).join(''); labelCells($('pendingList'));
 
   const order = { in: 0, brk: 1, out: 2 };
   $('people').innerHTML = [...act].sort((a, b) => order[statusOf(a.uid)] - order[statusOf(b.uid)] || (a.name || '').localeCompare(b.name || '')).map(u => {
@@ -556,7 +566,7 @@ function renderPeople() {
       <td>${roleCell}</td>
       <td>${canEdit ? `<button class="b-ghost b-sm" data-remove="${u.uid}">Remove</button>` : ''}</td>
     </tr>`;
-  }).join('');
+  }).join(''); labelCells($('people'));
 }
 
 async function safe(fn) { try { await fn(); } catch (err) { alert(niceError(err)); render(); } }
@@ -598,7 +608,7 @@ function renderTeams() {
       <td><b>${esc(t.name)}</b></td><td>${ppl.length}</td><td>${mgrs}</td><td>${working}</td>
       <td><button class="b-ghost b-sm" data-rename="${t.id}">Rename</button> <button class="b-ghost b-sm" data-tdel="${t.id}">Delete</button></td>
     </tr>`;
-  }).join('');
+  }).join(''); labelCells($('teamList'));
 }
 $('addTeamForm').onsubmit = e => {
   e.preventDefault();
@@ -810,7 +820,7 @@ function renderPlatform() {
       <td><span class="badge ${badge}">${st === 'rejected' ? 'Rejected' : st === 'pending' ? 'Pending' : 'Approved'}</span></td>
       <td>${actions}</td>
     </tr>`;
-  }).join('');
+  }).join(''); labelCells($('pfList'));
 }
 $('pfFilter').onchange = e => { platformFilter = e.target.value; renderPlatform(); };
 $('pfList').onclick = e => {
@@ -834,7 +844,7 @@ function renderSites() {
   if (!isAdmin()) return;
   $('siteList').innerHTML = sites().map(s => `<tr>
     <td><b>${esc(s.name)}</b></td><td>${s.radius} m</td><td>${mapsLink(s)}</td>
-    <td><button class="b-ghost b-sm" data-sdel="${s.id}">Delete</button></td></tr>`).join('');
+    <td><button class="b-ghost b-sm" data-sdel="${s.id}">Delete</button></td></tr>`).join(''); labelCells($('siteList'));
   show($('sitesEmpty'), !sites().length);
   if (tab !== 'settings' || !window.L) return;
   if (!siteMap) {
