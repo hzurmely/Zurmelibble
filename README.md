@@ -1,4 +1,4 @@
-# Punchclock
+# Zurmelibble
 
 A very simple time tracking app inspired by tools like Jibble. Single HTML file, no build step, no backend.
 
