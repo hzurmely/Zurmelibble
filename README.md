@@ -11,7 +11,8 @@ A simple Jibble style time tracking app. Runs on the web (GitHub Pages) and on A
 * Roles: Owner, Admin, Manager (sees their own team), Member (sees only themselves)
 * Switch between several organisations from the header
 * Clock in, clock out and breaks, with a live timer
-* GPS location saved on every clock in and clock out, shown on a map
+* Location must be on to clock in or out; the GPS position is saved and shown on a map
+* Work sites: admins set places with a radius; people can only clock in inside one, and leaving it while clocked in clocks them out automatically (while the app is open)
 * Timesheets filtered by team, person and date, plus CSV export
 * Organisation branding: the CEFAST Aerospace organisation uses its own design system (`brands/cefast/`), switched on by setting `brand: "cefast"` on the organisation in Firestore
 

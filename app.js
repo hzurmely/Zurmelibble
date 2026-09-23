@@ -73,15 +73,86 @@ const cleanCode = s => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
 const orgRef = (...p) => doc(db, 'orgs', orgId, ...p);
 const orgCol = name => collection(db, 'orgs', orgId, name);
 
+// ---------- Location & work sites ----------
+const GEO_OPTS = { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 };
+let lastPos = null, geoError = null, watchId = null, outsideSince = null, lastInsideSaved = 0, autoOutBusy = false;
+const sites = () => Array.isArray(org?.sites) ? org.sites : [];
+function distanceM(a, b) {
+  const R = 6371000, rad = x => x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const fmtDist = m => m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
+const slack = p => Math.min(p.acc || 0, 50);               // forgive up to 50 m of GPS error
+const siteDistances = p => sites().map(s => ({ s, d: distanceM(p, s) })).sort((x, y) => x.d - y.d);
+const siteHere = p => siteDistances(p).find(x => x.d <= x.s.radius + slack(p))?.s || null;
+const clearlyOutside = p => sites().length > 0 && siteDistances(p).every(x => x.d - slack(p) > x.s.radius);
+const geoMsg = e => e?.code === 1
+  ? 'Location permission is blocked. Allow location for Zurmelibble to clock in and out.'
+  : 'Location is off or unavailable. Turn on location (GPS) to clock in and out.';
+
 function getLocation() {
-  return new Promise(resolve => {
-    if (!navigator.geolocation) return resolve(null);
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject({ code: 2 });
     navigator.geolocation.getCurrentPosition(
-      p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) }),
-      () => resolve(null),
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+      p => { lastPos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), t: Date.now() }; geoError = null; resolve(lastPos); },
+      e => { geoError = e; reject(e); },
+      GEO_OPTS
     );
   });
+}
+function startWatch() {
+  if (watchId !== null || !navigator.geolocation) return;
+  watchId = navigator.geolocation.watchPosition(
+    p => { lastPos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), t: Date.now() }; geoError = null; checkGeofence(); renderGeo(); },
+    e => { geoError = e; renderGeo(); },
+    GEO_OPTS
+  );
+}
+function stopWatch() {
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null; outsideSince = null;
+}
+
+// While clocked in: leaving every work site for 20 s clocks you out automatically.
+async function checkGeofence() {
+  const open = user && isActive() ? openShiftOf(user.uid) : null;
+  if (!open || !sites().length || !lastPos || autoOutBusy || Date.now() - lastPos.t > 120000) { outsideSince = null; return; }
+  if (clearlyOutside(lastPos)) {
+    outsideSince ??= Date.now();
+    if (Date.now() - outsideSince < 20000) return;
+    autoOutBusy = true;
+    try {
+      // If we last saw them inside a while ago (app was closed), end the shift then.
+      const end = open.lastInsideAt && Date.now() - open.lastInsideAt > 5 * 60000 ? open.lastInsideAt : Date.now();
+      const near = siteDistances(lastPos)[0];
+      await closeShift(open, lastPos, { end, autoOut: true });
+      $('geoNote').textContent = `You left ${near.s.name}, so you were clocked out automatically at ${fmtTime(end)}.`;
+    } catch (e) { console.error(e); }
+    autoOutBusy = false; outsideSince = null;
+  } else {
+    outsideSince = null;
+    if (siteHere(lastPos) && Date.now() - lastInsideSaved > 180000) {
+      lastInsideSaved = Date.now();
+      updateDoc(orgRef('shifts', open.id), { lastInsideAt: Date.now() }).catch(() => {});
+    }
+  }
+}
+setInterval(checkGeofence, 10000);
+
+function renderGeo() {
+  const el = $('geoStatus'); if (!el || !isActive()) return;
+  let cls = 'muted', txt;
+  if (geoError) { cls = 'err'; txt = geoMsg(geoError); }
+  else if (!lastPos) txt = 'Checking your location…';
+  else if (!sites().length) txt = `Location on (±${lastPos.acc} m)`;
+  else {
+    const here = siteHere(lastPos);
+    if (here) { cls = 'ok'; txt = `You're at ${here.name} (±${lastPos.acc} m)`; }
+    else { const n = siteDistances(lastPos)[0]; txt = `You're ${fmtDist(n.d)} from ${n.s.name}. Clock in works within ${n.s.radius} m.`; }
+  }
+  el.className = cls; el.textContent = txt;
 }
 
 function niceError(e) {
@@ -145,6 +216,7 @@ onAuthStateChanged(auth, async u => {
   stop(userUnsubs); stop(orgUnsubs); stop(dataUnsubs);
   user = u; profile = null; memberships = []; orgId = null; resetOrgData();
   if (!u) {
+    stopWatch();
     show($('appView'), false); show($('authView'), true); setAuthMode(false);
     return;
   }
@@ -309,24 +381,36 @@ $('leaveOrg').onclick = () => leaveCurrentOrg(`Leave ${org?.name || 'this organi
 
 // ---------- Clock actions ----------
 let busy = false;
-async function closeShift(open, loc = null) {
-  const now = Date.now();
-  const breaks = (open.breaks || []).map(b => b.end ? b : { ...b, end: now });
-  await updateDoc(orgRef('shifts', open.id), { end: now, breaks, outLoc: loc });
+async function closeShift(open, loc = null, extra = {}) {
+  const end = extra.end ?? Date.now();
+  const breaks = (open.breaks || []).filter(b => b.start < end).map(b => b.end ? b : { ...b, end });
+  await updateDoc(orgRef('shifts', open.id), { end, breaks, outLoc: loc, autoOut: !!extra.autoOut });
 }
 async function act(kind) {
   if (busy || !isActive()) return; busy = true; renderClock();
   $('geoNote').textContent = kind === 'break' ? '' : 'Getting your location…';
   try {
     const open = openShiftOf(user.uid);
-    if (kind === 'in') {
-      const loc = await getLocation();
-      await addDoc(orgCol('shifts'), { uid: user.uid, name: myMember.name, teamId: myMember.teamId ?? null, start: Date.now(), end: null, breaks: [], inLoc: loc, outLoc: null });
-      $('geoNote').textContent = loc ? `Location saved (±${loc.acc} m)` : 'Clocked in without location (permission denied or unavailable).';
-    } else if (kind === 'out' && open) {
-      const loc = await getLocation();
-      await closeShift(open, loc);
-      $('geoNote').textContent = loc ? `Location saved (±${loc.acc} m)` : 'Clocked out without location.';
+    if (kind === 'in' || kind === 'out') {
+      let pos;
+      try { pos = await getLocation(); }
+      catch (e) { $('geoNote').textContent = geoMsg(e); busy = false; renderClock(); renderGeo(); return; }
+      renderGeo();
+      if (kind === 'in') {
+        const site = siteHere(pos);
+        if (sites().length && !site) {
+          const n = siteDistances(pos)[0];
+          $('geoNote').textContent = `You're ${fmtDist(n.d)} from ${n.s.name}. Get within ${n.s.radius} m to clock in.`;
+        } else {
+          const now = Date.now();
+          await addDoc(orgCol('shifts'), { uid: user.uid, name: myMember.name, teamId: myMember.teamId ?? null, start: now, end: null, breaks: [], inLoc: pos, outLoc: null, siteId: site?.id || null, siteName: site?.name || null, lastInsideAt: now });
+          lastInsideSaved = now;
+          $('geoNote').textContent = site ? `Clocked in at ${site.name}.` : `Location saved (±${pos.acc} m)`;
+        }
+      } else if (open) {
+        await closeShift(open, pos);
+        $('geoNote').textContent = `Clocked out. Location saved (±${pos.acc} m)`;
+      }
     } else if (kind === 'break' && open) {
       const now = Date.now();
       const breaks = [...(open.breaks || [])];
@@ -382,9 +466,9 @@ function renderSheet() {
   show($('sheetEmpty'), !rows.length);
   $('sheet').innerHTML = rows.map(s => `<tr>
     <td>${esc(nameOf(s.uid))}</td><td>${esc(teamName(s.teamId))}</td><td>${fmtDate(s.start)}</td>
-    <td>${fmtTime(s.start)}</td><td>${fmtTime(s.end)}</td>
+    <td>${fmtTime(s.start)}</td><td>${fmtTime(s.end)}${s.autoOut ? ' <span class="badge s-brk" title="Clocked out automatically after leaving the work site">auto</span>' : ''}</td>
     <td>${fmtDur(breakMs(s))}</td><td><b>${fmtDur(workedMs(s))}</b></td>
-    <td>${mapsLink(s.inLoc)}</td>
+    <td>${s.siteName ? esc(s.siteName) + '<br>' : ''}${mapsLink(s.inLoc)}</td>
     ${isStaff() ? `<td><button class="b-ghost b-sm" data-del="${s.id}">Delete</button></td>` : ''}
   </tr>`).join('');
 }
@@ -398,9 +482,9 @@ $('sheet').onclick = async e => {
 
 $('exportCsv').onclick = () => {
   const loc = l => l ? `${l.lat},${l.lng}` : '';
-  const lines = [['Member', 'Team', 'Date', 'Clock in', 'Clock out', 'Break minutes', 'Worked minutes', 'In location', 'Out location']]
+  const lines = [['Member', 'Team', 'Date', 'Clock in', 'Clock out', 'Break minutes', 'Worked minutes', 'Site', 'In location', 'Out location', 'Auto clock-out']]
     .concat(filtered().map(s => [nameOf(s.uid), teamName(s.teamId), fmtDate(s.start), fmtTime(s.start), s.end ? fmtTime(s.end) : '',
-      Math.round(breakMs(s) / 60000), Math.round(workedMs(s) / 60000), loc(s.inLoc), loc(s.outLoc)]));
+      Math.round(breakMs(s) / 60000), Math.round(workedMs(s) / 60000), s.siteName || '', loc(s.inLoc), loc(s.outLoc), s.autoOut ? 'yes' : '']));
   const csv = lines.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -583,6 +667,10 @@ function renderMap() {
     pts.push([loc.lat, loc.lng]);
     L.circleMarker([loc.lat, loc.lng], { radius: 8, color, fillColor: color, fillOpacity: .8, weight: 2 }).bindPopup(label).addTo(mapLayer);
   };
+  sites().forEach(s => {
+    pts.push([s.lat, s.lng]);
+    L.circle([s.lat, s.lng], { radius: s.radius, color: css.getPropertyValue('--accent').trim(), weight: 2, fillOpacity: .08 }).bindPopup(`<b>${esc(s.name)}</b><br>Radius ${s.radius} m`).addTo(mapLayer);
+  });
   filtered().forEach(s => {
     const n = esc(nameOf(s.uid));
     add(s.inLoc, css.getPropertyValue('--in').trim(), `<b>${n}</b><br>Clock in ${fmtDate(s.start)} ${fmtTime(s.start)}<br>±${s.inLoc?.acc} m`);
@@ -625,8 +713,72 @@ function render() {
   if (!allowed.includes(tab)) tab = 'clock';
   document.querySelectorAll('nav [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   setScreen('app');
-  renderClock(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderMap();
+  startWatch();
+  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap();
 }
+
+// ---------- Work sites (admins) ----------
+let siteMap = null, siteLayer = null, sitePoint = null;
+function renderSites() {
+  if (!isAdmin()) return;
+  $('siteList').innerHTML = sites().map(s => `<tr>
+    <td><b>${esc(s.name)}</b></td><td>${s.radius} m</td><td>${mapsLink(s)}</td>
+    <td><button class="b-ghost b-sm" data-sdel="${s.id}">Delete</button></td></tr>`).join('');
+  show($('sitesEmpty'), !sites().length);
+  if (tab !== 'settings' || !window.L) return;
+  if (!siteMap) {
+    siteMap = L.map('siteMap').setView([-19.92, -43.94], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(siteMap);
+    siteLayer = L.layerGroup().addTo(siteMap);
+    siteMap.on('click', e => { sitePoint = { lat: e.latlng.lat, lng: e.latlng.lng }; drawSites(); });
+    const first = sites()[0];
+    if (first) siteMap.setView([first.lat, first.lng], 16);
+    else if (lastPos) siteMap.setView([lastPos.lat, lastPos.lng], 16);
+  }
+  setTimeout(() => siteMap.invalidateSize(), 0);
+  drawSites();
+}
+function drawSites() {
+  if (!siteMap) return;
+  const css = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue('--accent').trim(), inC = css.getPropertyValue('--in').trim();
+  siteLayer.clearLayers();
+  sites().forEach(s => L.circle([s.lat, s.lng], { radius: s.radius, color: accent, weight: 2, fillOpacity: .1 }).bindTooltip(s.name).addTo(siteLayer));
+  if (sitePoint) {
+    const r = Math.max(20, +$('siteRadius').value || 100);
+    L.circle([sitePoint.lat, sitePoint.lng], { radius: r, color: inC, weight: 2, dashArray: '6 6', fillOpacity: .12 }).addTo(siteLayer);
+    L.circleMarker([sitePoint.lat, sitePoint.lng], { radius: 5, color: inC, fillColor: inC, fillOpacity: 1 }).addTo(siteLayer);
+    $('sitePick').textContent = `New site at ${sitePoint.lat.toFixed(5)}, ${sitePoint.lng.toFixed(5)}. Tap the map to move it.`;
+  }
+}
+$('siteRadius').addEventListener('input', drawSites);
+$('siteHere').onclick = async () => {
+  $('siteErr').textContent = '';
+  try {
+    const p = await getLocation();
+    sitePoint = { lat: p.lat, lng: p.lng };
+    if (siteMap) siteMap.setView([p.lat, p.lng], 17);
+    drawSites();
+  } catch (e) { $('siteErr').textContent = geoMsg(e); }
+};
+$('siteForm').onsubmit = e => {
+  e.preventDefault();
+  $('siteErr').textContent = '';
+  if (!sitePoint) { $('siteErr').textContent = 'Tap the map or use your location to place the site first.'; return; }
+  const name = $('siteName').value.trim(); if (!name) return;
+  const radius = Math.min(5000, Math.max(20, Math.round(+$('siteRadius').value || 100)));
+  const site = { id: Math.random().toString(36).slice(2, 10), name, lat: +sitePoint.lat.toFixed(6), lng: +sitePoint.lng.toFixed(6), radius };
+  safe(async () => {
+    await updateDoc(orgRef(), { sites: [...sites(), site] });
+    sitePoint = null; $('siteName').value = ''; $('sitePick').textContent = 'Site added. Tap the map to place another.';
+  });
+};
+$('siteList').onclick = e => {
+  const b = e.target.closest('[data-sdel]'); if (!b) return;
+  const s = sites().find(x => x.id === b.dataset.sdel);
+  if (!confirm(`Delete the work site ${s.name}?${sites().length === 1 ? ' With no sites left, people can clock in anywhere (location is still required).' : ''}`)) return;
+  safe(() => updateDoc(orgRef(), { sites: sites().filter(x => x.id !== s.id) }));
+};
 
 // ---------- Tabs ----------
 function setTab(t) { tab = t; render(); }

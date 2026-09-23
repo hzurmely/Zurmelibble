@@ -76,11 +76,13 @@
   td a { color: var(--accent); }
   .table-wrap { overflow-x: auto; }
   #map { height: 480px; border-radius: 10px; }
+  #siteMap { height: 320px; border-radius: 10px; z-index: 0; }
+  #map { z-index: 0; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
 
   .who select { max-width: 180px; padding: 6px 10px; font-size: 14px; }
   .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-  .stack { display: grid; gap: 10px; }
+  .stack { display: grid; gap: 10px; align-content: start; }
   .code { font: 700 28px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 3px; padding: 10px 16px; border: 1px dashed var(--line); border-radius: 10px; display: inline-block; }
   .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .toggle { position: relative; width: 44px; height: 26px; flex: none; }
@@ -192,6 +194,7 @@
         <div class="bigtime" id="myToday">0:00:00</div>
         <div class="muted">worked today</div>
         <div class="clock-actions" id="myActions"></div>
+        <div class="muted" id="geoStatus"></div>
         <div class="muted" id="geoNote"></div>
       </div>
     </section>
@@ -304,6 +307,21 @@
           <button type="submit">Save name</button>
           <div class="ok" id="orgNameMsg"></div>
         </form>
+        <div class="card stack" data-need="admin" hidden style="grid-column:1/-1">
+          <h2>Work sites</h2>
+          <p class="muted" style="margin:0">People can only clock in inside a work site, and if they leave it while clocked in they're clocked out automatically. With no sites, people can clock in anywhere, but location must still be on.</p>
+          <div id="siteMap"></div>
+          <div class="muted" id="sitePick">Tap the map to place a site, or use your current location.</div>
+          <form class="row" id="siteForm">
+            <input id="siteName" placeholder="Site name, e.g. Laboratório" required maxlength="60">
+            <label class="muted">Radius <input id="siteRadius" type="number" min="20" max="5000" step="10" value="100" style="width:90px"> m</label>
+            <button type="button" class="b-ghost" id="siteHere">Use my location</button>
+            <button type="submit">Add site</button>
+          </form>
+          <div class="err" id="siteErr"></div>
+          <div class="table-wrap"><table><tbody id="siteList"></tbody></table></div>
+          <p class="muted" id="sitesEmpty" style="margin:0">No work sites yet.</p>
+        </div>
         <div class="card stack">
           <h2>My membership</h2>
           <div class="muted" id="myMembership"></div>
