@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3b5bdb">
 <title>Zurmelibble</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
   :root {
     --bg: #f5f6fa; --card: #ffffff; --text: #1d2233; --muted: #6b7288;
@@ -16,227 +18,175 @@
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
-  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: var(--card); border-bottom: 1px solid var(--line); }
-  header h1 { margin: 0; font-size: 20px; }
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); padding-bottom: env(safe-area-inset-bottom); }
+  [hidden] { display: none !important; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; padding-top: calc(14px + env(safe-area-inset-top)); background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 1000; }
+  header h1 { margin: 0; font-size: 20px; white-space: nowrap; }
   header h1 span { color: var(--accent); }
-  #clock { font-variant-numeric: tabular-nums; color: var(--muted); }
-  main { max-width: 960px; margin: 0 auto; padding: 24px 16px; display: grid; gap: 20px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  .who { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); min-width: 0; }
+  .who b { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  nav { display: flex; gap: 4px; padding: 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); overflow-x: auto; }
+  nav button { background: transparent; color: var(--muted); font-weight: 500; padding: 8px 14px; }
+  nav button.active { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+  main { max-width: 1000px; margin: 0 auto; padding: 20px 16px; display: grid; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
   .card h2 { margin: 0 0 14px; font-size: 16px; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  input, select { font: inherit; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
-  button { font: inherit; padding: 9px 16px; border: 0; border-radius: 8px; cursor: pointer; color: #fff; background: var(--accent); font-weight: 600; }
-  button:disabled { opacity: .4; cursor: not-allowed; }
+  input, select { font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); min-width: 0; }
+  button { font: inherit; padding: 10px 16px; border: 0; border-radius: 8px; cursor: pointer; color: #fff; background: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
   .b-in { background: var(--in); } .b-out { background: var(--out); } .b-brk { background: var(--brk); }
-  .b-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 4px 10px; font-weight: 400; }
-  .people { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-  .person { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; }
-  .person .top { display: flex; justify-content: space-between; align-items: center; }
-  .name { font-weight: 600; }
-  .badge { font-size: 12px; padding: 3px 9px; border-radius: 99px; font-weight: 600; }
+  .b-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
+  .b-sm { padding: 5px 10px; font-size: 13px; }
+  .badge { font-size: 12px; padding: 3px 9px; border-radius: 99px; font-weight: 600; white-space: nowrap; }
   .s-in { background: color-mix(in srgb, var(--in) 18%, transparent); color: var(--in); }
   .s-out { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
   .s-brk { background: color-mix(in srgb, var(--brk) 18%, transparent); color: var(--brk); }
-  .today { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
-  .actions button { padding: 7px 12px; font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
-  th { color: var(--muted); font-weight: 500; }
-  .table-wrap { overflow-x: auto; }
-  .empty { color: var(--muted); font-size: 14px; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .s-admin { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .muted { color: var(--muted); font-size: 14px; }
+  .err { color: var(--out); font-size: 14px; min-height: 1em; }
+
+  /* Auth */
+  .auth { max-width: 380px; margin: 60px auto; }
+  .auth form { display: grid; gap: 10px; }
+  .auth .switch { background: none; color: var(--accent); padding: 4px; font-weight: 500; }
+
+  /* Clock */
+  .clockface { text-align: center; display: grid; gap: 14px; justify-items: center; padding: 10px 0; }
+  .bigtime { font-size: 48px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .clock-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .clock-actions button { padding: 14px 26px; font-size: 17px; border-radius: 12px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
   .stat { border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
-  .stat b { display: block; font-size: 24px; margin-top: 4px; }
+  .stat b { display: block; font-size: 22px; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .stat small { color: var(--muted); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  td a { color: var(--accent); }
+  .table-wrap { overflow-x: auto; }
+  #map { height: 480px; border-radius: 10px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>⏱ <span>Zurmel</span>ibble</h1>
-  <div id="clock"></div>
-</header>
 
-<main>
-  <section class="card">
-    <div class="stats">
-      <div class="stat"><small>Members</small><b id="stMembers">0</b></div>
-      <div class="stat"><small>Working now</small><b id="stIn">0</b></div>
-      <div class="stat"><small>On break</small><b id="stBrk">0</b></div>
-      <div class="stat"><small>Team hours today</small><b id="stHours">0h 00m</b></div>
+<!-- Setup notice (shown if Firebase isn't configured yet) -->
+<section id="setupView" class="card auth" hidden>
+  <h2>Almost there</h2>
+  <p class="muted">Zurmelibble needs a Firebase project. Fill in <code>firebase-config.js</code> with your project's config (see README).</p>
+</section>
+
+<!-- Auth -->
+<section id="authView" class="card auth" hidden>
+  <h1 style="margin:0 0 6px;font-size:24px">⏱ <span style="color:var(--accent)">Zurmel</span>ibble</h1>
+  <p class="muted" id="authTitle" style="margin:0 0 14px">Sign in to clock in</p>
+  <form id="authForm">
+    <input id="authName" placeholder="Your name" autocomplete="name" hidden>
+    <input id="authEmail" type="email" placeholder="Email" autocomplete="email" required>
+    <input id="authPass" type="password" placeholder="Password (6+ characters)" autocomplete="current-password" required minlength="6">
+    <button type="submit" id="authSubmit">Sign in</button>
+    <div class="err" id="authErr"></div>
+  </form>
+  <div class="row" style="justify-content:space-between">
+    <button class="switch" id="authToggle" type="button">Create an account</button>
+    <button class="switch" id="authReset" type="button">Forgot password?</button>
+  </div>
+</section>
+
+<!-- App -->
+<div id="appView" hidden>
+  <header>
+    <h1>⏱ <span>Zurmel</span>ibble</h1>
+    <div class="who">
+      <b id="meName"></b><span id="meRole" class="badge s-admin" hidden>Admin</span>
+      <button class="b-ghost b-sm" id="signOut">Sign out</button>
     </div>
-  </section>
+  </header>
+  <nav>
+    <button data-tab="clock" class="active">Clock</button>
+    <button data-tab="sheet">Timesheets</button>
+    <button data-tab="team" data-admin hidden>Team</button>
+    <button data-tab="map" data-admin hidden>Map</button>
+  </nav>
 
-  <section class="card">
-    <h2>Team</h2>
-    <form id="addForm" class="row" style="margin-bottom:14px">
-      <input id="newName" placeholder="Add a team member" required>
-      <button type="submit">Add</button>
-    </form>
-    <div id="people" class="people"></div>
-  </section>
-
-  <section class="card">
-    <h2>Timesheet</h2>
-    <div class="row" style="margin-bottom:12px">
-      <select id="filterPerson"><option value="">All members</option></select>
-      <input type="date" id="filterDate">
-      <button class="b-ghost" id="exportCsv" type="button">Export CSV</button>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Member</th><th>Date</th><th>Clock in</th><th>Clock out</th><th>Breaks</th><th>Worked</th></tr></thead>
-        <tbody id="sheet"></tbody>
-      </table>
-    </div>
-    <p id="sheetEmpty" class="empty">No entries yet. Clock someone in to get started.</p>
-  </section>
-</main>
-
-<script>
-const KEY = 'zurmelibble-v1';
-let state = load();
-
-function load() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || { people: [], shifts: [] }; }
-  catch { return { people: [], shifts: [] }; }
-}
-function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
-const uid = () => Math.random().toString(36).slice(2, 10);
-
-// A shift: { id, personId, start, end|null, breaks: [{start, end|null}] }
-function openShift(pid) { return state.shifts.find(s => s.personId === pid && !s.end); }
-function onBreak(shift) { return shift && shift.breaks.some(b => !b.end); }
-function status(pid) {
-  const s = openShift(pid);
-  return !s ? 'out' : onBreak(s) ? 'brk' : 'in';
-}
-function breakMs(shift, now = Date.now()) {
-  return shift.breaks.reduce((t, b) => t + ((b.end || now) - b.start), 0);
-}
-function workedMs(shift, now = Date.now()) {
-  return Math.max(0, (shift.end || now) - shift.start - breakMs(shift, now));
-}
-const sameDay = (ts, d = new Date()) => new Date(ts).toDateString() === d.toDateString();
-function fmtDur(ms) {
-  const m = Math.floor(ms / 60000);
-  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
-}
-const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '…';
-const fmtDate = ts => new Date(ts).toLocaleDateString();
-const esc = s => s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-const nameOf = pid => (state.people.find(p => p.id === pid) || {}).name || 'Removed';
-
-function todayMs(pid) {
-  return state.shifts.filter(s => s.personId === pid && sameDay(s.start))
-    .reduce((t, s) => t + workedMs(s), 0);
-}
-
-// Actions
-function clockIn(pid) { state.shifts.push({ id: uid(), personId: pid, start: Date.now(), end: null, breaks: [] }); save(); render(); }
-function clockOut(pid) {
-  const s = openShift(pid); if (!s) return;
-  const now = Date.now();
-  s.breaks.forEach(b => { if (!b.end) b.end = now; });
-  s.end = now; save(); render();
-}
-function toggleBreak(pid) {
-  const s = openShift(pid); if (!s) return;
-  const b = s.breaks.find(b => !b.end);
-  if (b) b.end = Date.now(); else s.breaks.push({ start: Date.now(), end: null });
-  save(); render();
-}
-function removePerson(pid) {
-  if (!confirm(`Remove ${nameOf(pid)}? Their timesheet entries stay.`)) return;
-  clockOut(pid);
-  state.people = state.people.filter(p => p.id !== pid); save(); render();
-}
-
-// Rendering
-function renderPeople() {
-  const el = document.getElementById('people');
-  if (!state.people.length) { el.innerHTML = '<p class="empty">No team members yet.</p>'; return; }
-  el.innerHTML = state.people.map(p => {
-    const st = status(p.id);
-    const label = { in: 'Working', out: 'Clocked out', brk: 'On break' }[st];
-    return `<div class="person">
-      <div class="top"><span class="name">${esc(p.name)}</span><span class="badge s-${st}">${label}</span></div>
-      <div class="today" data-today="${p.id}">Today: ${fmtDur(todayMs(p.id))}</div>
-      <div class="actions">
-        ${st === 'out'
-          ? `<button class="b-in" onclick="clockIn('${p.id}')">Clock in</button>`
-          : `<button class="b-out" onclick="clockOut('${p.id}')">Clock out</button>
-             <button class="b-brk" onclick="toggleBreak('${p.id}')">${st === 'brk' ? 'End break' : 'Break'}</button>`}
-        <button class="b-ghost" onclick="removePerson('${p.id}')" title="Remove">✕</button>
+  <main>
+    <!-- Clock tab -->
+    <section data-view="clock">
+      <div class="card clockface">
+        <span id="myStatus" class="badge s-out">Clocked out</span>
+        <div class="bigtime" id="myToday">0:00:00</div>
+        <div class="muted">worked today</div>
+        <div class="clock-actions" id="myActions"></div>
+        <div class="muted" id="geoNote"></div>
       </div>
-    </div>`;
-  }).join('');
-}
+    </section>
 
-function filteredShifts() {
-  const pid = document.getElementById('filterPerson').value;
-  const d = document.getElementById('filterDate').value;
-  return state.shifts
-    .filter(s => (!pid || s.personId === pid) && (!d || sameDay(s.start, new Date(d + 'T00:00'))))
-    .sort((a, b) => b.start - a.start);
-}
+    <!-- Timesheet tab -->
+    <section data-view="sheet" hidden>
+      <div class="card">
+        <h2>Timesheets</h2>
+        <div class="row" style="margin-bottom:12px">
+          <select id="fPerson" data-admin hidden><option value="">Everyone</option></select>
+          <label class="muted">From <input type="date" id="fFrom"></label>
+          <label class="muted">To <input type="date" id="fTo"></label>
+          <button class="b-ghost" id="exportCsv" type="button">Export CSV</button>
+        </div>
+        <div class="stats" style="margin-bottom:12px">
+          <div class="stat"><small>Shifts</small><b id="sCount">0</b></div>
+          <div class="stat"><small>Total worked</small><b id="sTotal">0h 00m</b></div>
+          <div class="stat"><small>Total breaks</small><b id="sBreaks">0h 00m</b></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Member</th><th>Date</th><th>In</th><th>Out</th><th>Breaks</th><th>Worked</th><th>Location</th><th data-admin hidden></th></tr></thead>
+            <tbody id="sheet"></tbody>
+          </table>
+        </div>
+        <p id="sheetEmpty" class="muted">No shifts in this range.</p>
+      </div>
+    </section>
 
-function renderSheet() {
-  const rows = filteredShifts();
-  document.getElementById('sheetEmpty').style.display = rows.length ? 'none' : 'block';
-  document.getElementById('sheet').innerHTML = rows.map(s => `<tr>
-    <td>${esc(nameOf(s.personId))}</td><td>${fmtDate(s.start)}</td>
-    <td>${fmtTime(s.start)}</td><td>${fmtTime(s.end)}</td>
-    <td>${fmtDur(breakMs(s))}</td><td><b>${fmtDur(workedMs(s))}</b></td></tr>`).join('');
-}
+    <!-- Team tab (admin) -->
+    <section data-view="team" hidden>
+      <div class="card">
+        <div class="stats">
+          <div class="stat"><small>Members</small><b id="tMembers">0</b></div>
+          <div class="stat"><small>Working now</small><b id="tIn">0</b></div>
+          <div class="stat"><small>On break</small><b id="tBrk">0</b></div>
+          <div class="stat"><small>Team hours today</small><b id="tHours">0h 00m</b></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2>Team</h2>
+        <p class="muted" style="margin-top:-6px">People join by creating an account in the app. Admins can see and manage everyone's time.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Status</th><th>Since</th><th>Today</th><th>Role</th><th></th></tr></thead>
+            <tbody id="team"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
-function renderFilter() {
-  const sel = document.getElementById('filterPerson'), cur = sel.value;
-  sel.innerHTML = '<option value="">All members</option>' +
-    state.people.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
-  sel.value = state.people.some(p => p.id === cur) ? cur : '';
-}
+    <!-- Map tab (admin) -->
+    <section data-view="map" hidden>
+      <div class="card">
+        <h2>Clock in/out locations</h2>
+        <div class="row muted" style="margin-bottom:10px">
+          <span><span class="dot" style="background:var(--in)"></span>Clock in</span>
+          <span><span class="dot" style="background:var(--out)"></span>Clock out</span>
+          <span>Uses the Timesheets filters.</span>
+        </div>
+        <div id="map"></div>
+      </div>
+    </section>
+  </main>
+</div>
 
-function renderStats() {
-  const st = state.people.map(p => status(p.id));
-  document.getElementById('stMembers').textContent = state.people.length;
-  document.getElementById('stIn').textContent = st.filter(s => s === 'in').length;
-  document.getElementById('stBrk').textContent = st.filter(s => s === 'brk').length;
-  const total = state.shifts.filter(s => sameDay(s.start)).reduce((t, s) => t + workedMs(s), 0);
-  document.getElementById('stHours').textContent = fmtDur(total);
-}
-
-function render() { renderPeople(); renderFilter(); renderSheet(); renderStats(); }
-
-function tick() {
-  document.getElementById('clock').textContent = new Date().toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
-// Events
-document.getElementById('addForm').addEventListener('submit', e => {
-  e.preventDefault();
-  const input = document.getElementById('newName');
-  const name = input.value.trim(); if (!name) return;
-  state.people.push({ id: uid(), name }); input.value = ''; save(); render();
-});
-document.getElementById('filterPerson').addEventListener('change', renderSheet);
-document.getElementById('filterDate').addEventListener('change', renderSheet);
-document.getElementById('exportCsv').addEventListener('click', () => {
-  const lines = [['Member','Date','Clock in','Clock out','Break minutes','Worked minutes']]
-    .concat(filteredShifts().map(s => [nameOf(s.personId), fmtDate(s.start), fmtTime(s.start),
-      s.end ? fmtTime(s.end) : '', Math.round(breakMs(s) / 60000), Math.round(workedMs(s) / 60000)]));
-  const csv = lines.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = 'timesheet.csv'; a.click();
-});
-
-tick(); render();
-setInterval(tick, 1000);
-setInterval(() => { renderStats(); renderSheet();
-  state.people.forEach(p => { const el = document.querySelector(`[data-today="${p.id}"]`); if (el) el.textContent = 'Today: ' + fmtDur(todayMs(p.id)); });
-}, 30000);
-</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
