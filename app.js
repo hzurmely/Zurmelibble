@@ -39,6 +39,8 @@ let shifts = [];          // shifts visible to me
 let userUnsubs = [], orgUnsubs = [], dataUnsubs = [];
 let dataKey = '';
 let tab = 'clock';
+let directory = [], lists = [], cards = [], listsLoaded = false, creatingLists = false;
+let boardTeam = '', boardSub = '', boardMine = false, boardSearch = '', dragging = false, boardSortables = [];
 let onboarding = false;   // user chose "create or join another"
 let map = null, mapLayer = null;
 const pendingJoin = (new URLSearchParams(location.search).get('join') || '').toUpperCase();
@@ -291,9 +293,13 @@ function openOrg(id) {
 
 function subscribeData() {
   stop(dataUnsubs);
-  members = []; teams = []; shifts = [];
+  members = []; teams = []; shifts = []; directory = []; lists = []; cards = []; listsLoaded = false;
   if (!isActive()) { render(); return; }
   const onErr = err => console.error(err);
+  // Board data: everyone in the organisation shares one board.
+  dataUnsubs.push(onSnapshot(orgCol('members'), s => { directory = s.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => m.role !== 'pending').sort((x, y) => (x.name || '').localeCompare(y.name || '')); render(); }, onErr));
+  dataUnsubs.push(onSnapshot(orgCol('lists'), s => { lists = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((x, y) => x.order - y.order); listsLoaded = true; render(); }, onErr));
+  dataUnsubs.push(onSnapshot(query(orgCol('cards'), limit(3000)), s => { cards = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, onErr));
   dataUnsubs.push(onSnapshot(orgCol('teams'), s => { teams = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name)); render(); }, onErr));
   const setShifts = s => { shifts = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.start - a.start); render(); };
   const setMembers = s => { members = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); };
@@ -606,6 +612,7 @@ function renderTeams() {
     const working = ppl.filter(m => statusOf(m.uid) !== 'out').length;
     return `<tr>
       <td><b>${esc(t.name)}</b></td><td>${ppl.length}</td><td>${mgrs}</td><td>${working}</td>
+      <td><div class="chips">${(t.subsystems || []).map(s => `<span class="chip">${esc(s.name)}<button class="tiny" title="Remove subsystem" data-subdel="${t.id}|${s.id}">✕</button></span>`).join('')}<button class="b-ghost b-sm" data-subadd="${t.id}">Add subsystem</button></div></td>
       <td><button class="b-ghost b-sm" data-rename="${t.id}">Rename</button> <button class="b-ghost b-sm" data-tdel="${t.id}">Delete</button></td>
     </tr>`;
   }).join(''); labelCells($('teamList'));
@@ -618,6 +625,26 @@ $('addTeamForm').onsubmit = e => {
 };
 $('teamList').onclick = e => {
   const rn = e.target.closest('[data-rename]'), del = e.target.closest('[data-tdel]');
+  const sAdd = e.target.closest('[data-subadd]'), sDel = e.target.closest('[data-subdel]');
+  if (sAdd) {
+    const t = teams.find(x => x.id === sAdd.dataset.subadd);
+    const name = prompt(`New subsystem in ${t.name}`)?.trim();
+    if (name) safe(() => updateDoc(orgRef('teams', t.id), { subsystems: [...(t.subsystems || []), { id: Math.random().toString(36).slice(2, 10), name }] }));
+    return;
+  }
+  if (sDel) {
+    const [tid, sid] = sDel.dataset.subdel.split('|');
+    const t = teams.find(x => x.id === tid), s = (t.subsystems || []).find(x => x.id === sid);
+    const n = cards.filter(c => c.subsystemId === sid).length;
+    if (!confirm(`Remove the subsystem ${s.name} from ${t.name}?${n ? ` ${n} card(s) will keep the team but lose the subsystem.` : ''}`)) return;
+    safe(async () => {
+      const b = writeBatch(db);
+      b.update(orgRef('teams', tid), { subsystems: t.subsystems.filter(x => x.id !== sid) });
+      cards.filter(c => c.subsystemId === sid).forEach(c => b.update(orgRef('cards', c.id), { subsystemId: null }));
+      await b.commit();
+    });
+    return;
+  }
   if (rn) {
     const t = teams.find(x => x.id === rn.dataset.rename);
     const name = prompt('New team name', t.name)?.trim();
@@ -757,12 +784,13 @@ function render() {
     setScreen('review'); return;
   }
   document.querySelectorAll('[data-need]').forEach(el => show(el, el.dataset.need === 'super' ? isSuper() : el.dataset.need === 'admin' ? isAdmin() : isStaff()));
-  const allowed = ['clock', 'sheet', 'settings'].concat(isStaff() ? ['people', 'map'] : [], isAdmin() ? ['teams'] : []);
+  const allowed = ['clock', 'sheet', 'board', 'settings'].concat(isStaff() ? ['people', 'map'] : [], isAdmin() ? ['teams'] : []);
   if (!allowed.includes(tab)) tab = 'clock';
   document.querySelectorAll('nav [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.body.classList.toggle('wide', tab === 'board');
   setScreen('app');
   startWatch();
-  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap();
+  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap(); renderBoard();
 }
 
 // ---------- Organisation awaiting / refused approval ----------
@@ -899,6 +927,181 @@ $('siteList').onclick = e => {
   const s = sites().find(x => x.id === b.dataset.sdel);
   if (!confirm(`Delete the work site ${s.name}?${sites().length === 1 ? ' With no sites left, people can clock in anywhere (location is still required).' : ''}`)) return;
   safe(() => updateDoc(orgRef(), { sites: sites().filter(x => x.id !== s.id) }));
+};
+
+// ---------- Board (Kanban) ----------
+const subsOf = teamId => teams.find(t => t.id === teamId)?.subsystems || [];
+const subName = (teamId, subId) => subsOf(teamId).find(s => s.id === subId)?.name || '';
+const personName = uid => directory.find(m => m.uid === uid)?.name || 'Former member';
+const initials = n => (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+const canDeleteCard = c => isStaff() || c.createdBy === user.uid;
+function dueInfo(due) {
+  if (!due) return null;
+  const d = new Date(due + 'T23:59:59'), days = (d - Date.now()) / 864e5;
+  return { label: new Date(due + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'short' }), cls: days < 0 ? 'overdue' : days < 2 ? 'soon' : '' };
+}
+function visibleCards(listId) {
+  const q = boardSearch.toLowerCase();
+  return cards.filter(c => c.listId === listId
+    && (!boardTeam || (boardTeam === '__none' ? !c.teamId : c.teamId === boardTeam))
+    && (!boardSub || c.subsystemId === boardSub)
+    && (!boardMine || (c.assignees || []).includes(user.uid))
+    && (!q || (c.title || '').toLowerCase().includes(q) || (c.desc || '').toLowerCase().includes(q)))
+    .sort((x, y) => (x.order ?? 0) - (y.order ?? 0));
+}
+function cardHtml(c) {
+  const tag = [c.teamId ? teamName(c.teamId) : '', c.subsystemId ? subName(c.teamId, c.subsystemId) : ''].filter(Boolean).join(' · ');
+  const due = dueInfo(c.due);
+  const avs = (c.assignees || []).slice(0, 4).map(u => `<span class="kav" title="${esc(personName(u))}">${esc(initials(personName(u)))}</span>`).join('');
+  return `<div class="kcard" data-card="${c.id}">
+    ${tag ? `<div class="kcard-tags">${esc(tag)}</div>` : ''}
+    <div class="kcard-title">${esc(c.title)}</div>
+    ${(due || c.desc || avs) ? `<div class="kcard-meta">${due ? `<span class="kdue ${due.cls}">Due ${esc(due.label)}</span>` : ''}${c.desc ? '<span title="Has a description">≡</span>' : ''}<span class="kavs">${avs}</span></div>` : ''}
+  </div>`;
+}
+function renderBoardFilters() {
+  const tSel = $('bTeam'), sSel = $('bSub');
+  tSel.innerHTML = '<option value="">All teams</option><option value="__none">No team</option>' + teams.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  tSel.value = [...tSel.options].some(o => o.value === boardTeam) ? boardTeam : (boardTeam = '');
+  const subs = boardTeam && boardTeam !== '__none' ? subsOf(boardTeam) : [];
+  sSel.innerHTML = '<option value="">All subsystems</option>' + subs.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  sSel.value = subs.some(s => s.id === boardSub) ? boardSub : (boardSub = '');
+  show(sSel, subs.length > 0);
+  $('bMine').checked = boardMine;
+}
+function renderBoard() {
+  if (tab !== 'board' || !isActive()) return;
+  if (dragging || document.activeElement?.closest?.('.kadd')) return;
+  renderBoardFilters();
+  // First visit by an admin: set up the default lists.
+  if (listsLoaded && !lists.length && isAdmin() && !creatingLists) {
+    creatingLists = true;
+    const b = writeBatch(db);
+    ['To do', 'Doing', 'Done'].forEach((name, i) => b.set(doc(orgCol('lists')), { name, order: (i + 1) * 1024, createdAt: Date.now() }));
+    b.commit().catch(err => console.error(err)).finally(() => { creatingLists = false; });
+  }
+  show($('boardEmpty'), listsLoaded && !lists.length && !isAdmin());
+  $('boardEmpty').textContent = 'The board has no lists yet. An admin needs to open the Board once to set it up.';
+  boardSortables.forEach(s => s.destroy()); boardSortables = [];
+  $('board').innerHTML = lists.map(l => {
+    const vc = visibleCards(l.id);
+    return `<div class="klist ${isAdmin() ? 'admin' : ''}" data-list="${l.id}">
+      <div class="klist-head"><b>${esc(l.name)}</b><span class="n">${vc.length}</span>
+        ${isAdmin() ? `<button class="tiny" data-lren="${l.id}" title="Rename list">✎</button><button class="tiny" data-ldel="${l.id}" title="Delete list">✕</button>` : ''}</div>
+      <div class="klist-cards" data-list="${l.id}">${vc.map(cardHtml).join('')}</div>
+      <form class="kadd" data-list="${l.id}"><input placeholder="Add a card" maxlength="200"></form>
+    </div>`;
+  }).join('');
+  if (!window.Sortable) return;
+  const common = { animation: 150, forceFallback: true, fallbackTolerance: 4, delay: 180, delayOnTouchOnly: true,
+    onStart: () => { dragging = true; }, onEnd: () => { dragging = false; setTimeout(render, 0); } };
+  document.querySelectorAll('.klist-cards').forEach(el => boardSortables.push(new Sortable(el, {
+    ...common, group: 'cards', draggable: '.kcard',
+    onEnd: ev => { dragging = false; moveCard(ev.item, ev.to); }
+  })));
+  if (isAdmin()) boardSortables.push(new Sortable($('board'), {
+    ...common, draggable: '.klist', handle: '.klist-head',
+    onEnd: () => { dragging = false; reorderLists(); }
+  }));
+}
+function orderBetween(prev, next) {
+  if (prev == null && next == null) return 1024;
+  if (prev == null) return next - 1024;
+  if (next == null) return prev + 1024;
+  return (prev + next) / 2;
+}
+function moveCard(item, toEl) {
+  const id = item.dataset.card, listId = toEl.dataset.list;
+  const ids = [...toEl.querySelectorAll('.kcard')].map(e => e.dataset.card);
+  const i = ids.indexOf(id);
+  const ord = x => cards.find(c => c.id === x)?.order ?? null;
+  const order = orderBetween(i > 0 ? ord(ids[i - 1]) : null, i < ids.length - 1 ? ord(ids[i + 1]) : null);
+  const c = cards.find(x => x.id === id);
+  if (c) { c.listId = listId; c.order = order; }   // optimistic
+  safe(() => updateDoc(orgRef('cards', id), { listId, order, updatedAt: Date.now() }));
+  setTimeout(render, 0);
+}
+function reorderLists() {
+  const ids = [...$('board').querySelectorAll('.klist')].map(e => e.dataset.list);
+  safe(async () => {
+    const b = writeBatch(db);
+    ids.forEach((id, i) => { const l = lists.find(x => x.id === id); if (l && l.order !== (i + 1) * 1024) b.update(orgRef('lists', id), { order: (i + 1) * 1024 }); });
+    await b.commit();
+  });
+  setTimeout(render, 0);
+}
+$('board').addEventListener('submit', e => {
+  const f = e.target.closest('.kadd'); if (!f) return;
+  e.preventDefault();
+  const input = f.querySelector('input'), title = input.value.trim(); if (!title) return;
+  input.value = '';
+  const listId = f.dataset.list;
+  const max = Math.max(0, ...cards.filter(c => c.listId === listId).map(c => c.order ?? 0));
+  const teamId = boardTeam && boardTeam !== '__none' ? boardTeam : (boardTeam === '__none' ? null : myMember.teamId ?? null);
+  safe(() => addDoc(orgCol('cards'), { title, desc: '', listId, order: max + 1024, teamId, subsystemId: boardSub || null, assignees: [], due: null, createdBy: user.uid, createdByName: myMember.name, createdAt: Date.now(), updatedAt: Date.now() }));
+});
+$('board').addEventListener('focusout', e => { if (e.target.closest('.kadd')) setTimeout(() => { if (!document.activeElement?.closest?.('.kadd')) renderBoard(); }, 150); });
+$('board').addEventListener('click', e => {
+  const ren = e.target.closest('[data-lren]'), del = e.target.closest('[data-ldel]'), card = e.target.closest('.kcard');
+  if (ren) {
+    const l = lists.find(x => x.id === ren.dataset.lren);
+    const name = prompt('List name', l.name)?.trim();
+    if (name) safe(() => updateDoc(orgRef('lists', l.id), { name }));
+  } else if (del) {
+    const l = lists.find(x => x.id === del.dataset.ldel), inList = cards.filter(c => c.listId === l.id);
+    if (!confirm(inList.length ? `Delete the list ${l.name} and its ${inList.length} card(s)?` : `Delete the list ${l.name}?`)) return;
+    safe(async () => { const b = writeBatch(db); inList.forEach(c => b.delete(orgRef('cards', c.id))); b.delete(orgRef('lists', l.id)); await b.commit(); });
+  } else if (card) openCard(card.dataset.card);
+});
+$('bAddList').onclick = () => {
+  const name = prompt('New list name')?.trim(); if (!name) return;
+  const max = Math.max(0, ...lists.map(l => l.order ?? 0));
+  safe(() => addDoc(orgCol('lists'), { name, order: max + 1024, createdAt: Date.now() }));
+};
+$('bTeam').onchange = e => { boardTeam = e.target.value; boardSub = ''; renderBoard(); };
+$('bSub').onchange = e => { boardSub = e.target.value; renderBoard(); };
+$('bMine').onchange = e => { boardMine = e.target.checked; renderBoard(); };
+$('bSearch').oninput = e => { boardSearch = e.target.value.trim(); renderBoard(); };
+
+// Card editor
+let editing = null;
+function fillCardSubs(teamId, sel) {
+  const subs = subsOf(teamId);
+  $('cSub').innerHTML = '<option value="">None</option>' + subs.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  $('cSub').value = subs.some(s => s.id === sel) ? sel : '';
+  $('cSub').disabled = !subs.length;
+}
+function openCard(id) {
+  const c = cards.find(x => x.id === id); if (!c) return;
+  editing = id;
+  $('cTitle').value = c.title || ''; $('cDesc').value = c.desc || ''; $('cDue').value = c.due || ''; $('cErr').textContent = '';
+  $('cList').innerHTML = lists.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join(''); $('cList').value = c.listId;
+  $('cTeam').innerHTML = '<option value="">No team</option>' + teams.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  $('cTeam').value = c.teamId || '';
+  fillCardSubs(c.teamId, c.subsystemId);
+  $('cPeople').innerHTML = directory.map(m => `<label><input type="checkbox" value="${m.uid}" ${(c.assignees || []).includes(m.uid) ? 'checked' : ''}>${esc(m.name)}</label>`).join('') || '<span class="muted">Nobody yet.</span>';
+  $('cMeta').textContent = `Created by ${c.createdByName || personName(c.createdBy)} on ${fmtDate(c.createdAt)}`;
+  show($('cDelete'), canDeleteCard(c));
+  $('cardDlg').showModal();
+}
+$('cTeam').onchange = e => fillCardSubs(e.target.value, '');
+$('cCancel').onclick = () => $('cardDlg').close();
+$('cardForm').onsubmit = e => {
+  e.preventDefault();
+  const c = cards.find(x => x.id === editing); if (!c) return;
+  const title = $('cTitle').value.trim(); if (!title) return;
+  const listId = $('cList').value;
+  const patch = { title, desc: $('cDesc').value.trim(), due: $('cDue').value || null, teamId: $('cTeam').value || null, subsystemId: $('cSub').value || null,
+    assignees: [...$('cPeople').querySelectorAll('input:checked')].map(i => i.value), updatedAt: Date.now() };
+  if (listId !== c.listId) { patch.listId = listId; patch.order = Math.max(0, ...cards.filter(x => x.listId === listId).map(x => x.order ?? 0)) + 1024; }
+  $('cardDlg').close();
+  safe(() => updateDoc(orgRef('cards', c.id), patch));
+};
+$('cDelete').onclick = () => {
+  const c = cards.find(x => x.id === editing); if (!c) return;
+  if (!confirm(`Delete the card "${c.title}"?`)) return;
+  $('cardDlg').close();
+  safe(() => deleteDoc(orgRef('cards', c.id)));
 };
 
 // ---------- Tabs ----------

@@ -32,6 +32,42 @@
   main { max-width: 1000px; margin: 0 auto; padding: 20px 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
   main > section, .card, .grid2 > * { min-width: 0; }
   html, body { overflow-x: hidden; }
+  body.wide main { max-width: 1500px; }
+  /* Board */
+  .board-bar .row > input { flex: 1 1 160px; }
+  .chk { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .board { display: flex; gap: 12px; overflow-x: auto; align-items: flex-start; padding-bottom: 10px; scroll-snap-type: x proximity; min-height: 200px; }
+  .klist { flex: 0 0 290px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; max-height: calc(100vh - 230px); scroll-snap-align: start; }
+  .klist-head { display: flex; align-items: center; gap: 6px; padding: 2px 2px 8px; }
+  .klist-head b { flex: 1; overflow-wrap: anywhere; }
+  .klist-head .n { color: var(--muted); font-size: 13px; }
+  .klist.admin .klist-head { cursor: grab; }
+  .klist-cards { display: flex; flex-direction: column; gap: 8px; min-height: 14px; overflow-y: auto; padding: 2px; }
+  .kcard { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; cursor: pointer; display: grid; gap: 6px; user-select: none; }
+  .kcard:hover { border-color: var(--accent); }
+  .kcard-tags { font-size: 11px; color: var(--accent); font-weight: 700; }
+  .kcard-title { font-size: 14px; overflow-wrap: anywhere; color: var(--text); }
+  .kcard-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .kdue.overdue { color: var(--out); font-weight: 700; } .kdue.soon { color: var(--brk); font-weight: 700; }
+  .kavs { display: flex; margin-left: auto; }
+  .kav { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; background: var(--accent); border: 2px solid var(--bg); margin-left: -6px; }
+  .kadd input { width: 100%; margin-top: 8px; background: transparent; border-style: dashed; }
+  .sortable-ghost { opacity: .35; }
+  .sortable-drag, .sortable-fallback { transform: rotate(2deg); opacity: .95 !important; }
+  .tiny { background: transparent; color: var(--muted); padding: 2px 6px; font-size: 12px; font-weight: 500; }
+  .tiny:hover { color: var(--text); }
+  dialog#cardDlg { border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--text); width: min(560px, calc(100vw - 24px)); padding: 18px; }
+  dialog::backdrop { background: rgba(0, 0, 0, .55); }
+  #cardDlg textarea { font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); resize: vertical; }
+  #cTitle { font-size: 17px; font-weight: 600; }
+  .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .grid-2 label { display: grid; gap: 4px; font-size: 13px; }
+  .pick { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pick label { border: 1px solid var(--line); border-radius: 99px; padding: 5px 10px; font-size: 13px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .pick label:has(input:checked) { border-color: var(--accent); color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chip { border: 1px solid var(--line); border-radius: 99px; padding: 3px 4px 3px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+  @media (max-width: 640px) { .klist { flex-basis: 84vw; max-height: none; } .board-bar .row > * { flex: 1 1 45%; } }
   /* Phones: tables become stacked cards, filters go full width */
   @media (max-width: 640px) {
     main { padding: 14px 12px; }
@@ -179,6 +215,7 @@
     <button data-tab="people" data-need="staff" hidden>People</button>
     <button data-tab="teams" data-need="admin" hidden>Teams</button>
     <button data-tab="map" data-need="staff" hidden>Map</button>
+    <button data-tab="board">Board</button>
     <button data-tab="settings">Settings</button>
   </nav>
 
@@ -332,7 +369,7 @@
         </form>
         <div class="table-wrap">
           <table class="rtable">
-            <thead><tr><th>Team</th><th>People</th><th>Managers</th><th>Working now</th><th></th></tr></thead>
+            <thead><tr><th>Team</th><th>People</th><th>Managers</th><th>Working now</th><th>Subsystems</th><th></th></tr></thead>
             <tbody id="teamList"></tbody>
           </table>
         </div>
@@ -354,6 +391,21 @@
     </section>
 
     <!-- Settings tab -->
+    <!-- Board (Kanban) -->
+    <section data-view="board" hidden>
+      <div class="card board-bar">
+        <div class="row">
+          <select id="bTeam" title="Team"></select>
+          <select id="bSub" title="Subsystem"></select>
+          <input id="bSearch" placeholder="Search cards" maxlength="60">
+          <label class="muted chk"><input type="checkbox" id="bMine"> Only my cards</label>
+          <button class="b-ghost" id="bAddList" type="button" data-need="admin" hidden>Add list</button>
+        </div>
+      </div>
+      <div class="board" id="board"></div>
+      <p class="muted" id="boardEmpty" hidden></p>
+    </section>
+
     <section data-view="settings" hidden>
       <div class="grid2">
         <div class="card stack" data-need="admin" hidden>
@@ -403,6 +455,30 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="vendor/Sortable.min.js"></script>
+<dialog id="cardDlg">
+  <form id="cardForm" class="stack" method="dialog">
+    <input id="cTitle" placeholder="Card title" required maxlength="200">
+    <textarea id="cDesc" rows="5" placeholder="Description" maxlength="5000"></textarea>
+    <div class="grid-2">
+      <label class="muted">List<select id="cList"></select></label>
+      <label class="muted">Due date<input type="date" id="cDue"></label>
+      <label class="muted">Team<select id="cTeam"></select></label>
+      <label class="muted">Subsystem<select id="cSub"></select></label>
+    </div>
+    <div class="muted">Assigned to</div>
+    <div class="pick" id="cPeople"></div>
+    <div class="muted" id="cMeta"></div>
+    <div class="row" style="justify-content:space-between">
+      <button type="button" class="b-ghost" id="cDelete">Delete card</button>
+      <div class="row">
+        <button type="button" class="b-ghost" id="cCancel">Cancel</button>
+        <button type="submit" id="cSave">Save</button>
+      </div>
+    </div>
+    <div class="err" id="cErr"></div>
+  </form>
+</dialog>
 <script type="module" src="app.js"></script>
 </body>
 </html>

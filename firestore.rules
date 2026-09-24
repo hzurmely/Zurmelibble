@@ -50,8 +50,9 @@ service cloud.firestore {
       allow delete: if isSuper() || hasRole(org, ['owner']);
 
       match /members/{m} {
-        allow get: if signedIn() && (uid() == m || isSuper() || isAdmin(org) || managesTeam(org, resource.data.teamId));
-        allow list: if isSuper() || isAdmin(org) || managesTeam(org, resource.data.teamId);
+        // Everyone in the organisation can see who else is in it (names for the board).
+        allow get: if signedIn() && (uid() == m || isSuper() || isMember(org));
+        allow list: if isSuper() || isMember(org);
 
         allow create: if signedIn() && uid() == m && request.resource.data.uid == m && (
           // Founder: the organisation is being created in the same batch.
@@ -81,6 +82,18 @@ service cloud.firestore {
       match /teams/{t} {
         allow read: if isMember(org);
         allow write: if isAdmin(org);
+      }
+
+      // Kanban board: one shared board per organisation.
+      match /lists/{l} {
+        allow read: if isMember(org);
+        allow write: if isAdmin(org) && approved(org);
+      }
+      match /cards/{c} {
+        allow read: if isMember(org);
+        allow create: if isMember(org) && approved(org) && request.resource.data.createdBy == uid();
+        allow update: if isMember(org) && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if isAdmin(org) || hasRole(org, ['manager']) || (isMember(org) && resource.data.createdBy == uid());
       }
 
       match /shifts/{s} {
