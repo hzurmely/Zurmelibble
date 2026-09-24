@@ -39,6 +39,19 @@ jobs:
           sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />#' android/app/src/main/AndroidManifest.xml
           grep -n permission android/app/src/main/AndroidManifest.xml
 
+      - name: Version and signing key
+        working-directory: build/android
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+        run: |
+          # Every build must be signed with the same key, or phones refuse to update the app.
+          if [ -z "$KEYSTORE_B64" ]; then echo "::error::Add the ANDROID_DEBUG_KEYSTORE repository secret (see README)"; exit 1; fi
+          mkdir -p ~/.android
+          echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+          # A higher version code on every build so Android installs it as an update.
+          sed -i -E "s/versionCode [0-9]+/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"1.0.${{ github.run_number }}\"/" app/build.gradle
+          grep -nE "versionCode|versionName" app/build.gradle
+
       - name: Build APK
         working-directory: build/android
         run: |
@@ -56,6 +69,6 @@ jobs:
         with:
           tag_name: build-${{ github.run_number }}
           name: Zurmelibble build ${{ github.run_number }}
-          body: Android APK built from ${{ github.sha }}. Download Zurmelibble.apk below and install it on your phone.
+          body: Android APK version 1.0.${{ github.run_number }}, built from ${{ github.sha }}. Download Zurmelibble.apk below and open it on your phone to install or update.
           files: Zurmelibble.apk
           make_latest: true
