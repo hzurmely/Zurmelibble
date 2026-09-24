@@ -46,8 +46,24 @@ jobs:
         run: |
           # Every build must be signed with the same key, or phones refuse to update the app.
           if [ -z "$KEYSTORE_B64" ]; then echo "::error::Add the ANDROID_DEBUG_KEYSTORE repository secret (see README)"; exit 1; fi
-          mkdir -p ~/.android
-          echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/zurmelibble.keystore"
+          keytool -list -keystore "$RUNNER_TEMP/zurmelibble.keystore" -storepass android | grep -i fingerprint
+          cat >> app/build.gradle <<GRADLE
+
+          android {
+              signingConfigs {
+                  fixed {
+                      storeFile file("$RUNNER_TEMP/zurmelibble.keystore")
+                      storePassword "android"
+                      keyAlias "androiddebugkey"
+                      keyPassword "android"
+                  }
+              }
+              buildTypes {
+                  debug { signingConfig signingConfigs.fixed }
+              }
+          }
+          GRADLE
           # A higher version code on every build so Android installs it as an update.
           sed -i -E "s/versionCode [0-9]+/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"1.0.${{ github.run_number }}\"/" app/build.gradle
           grep -nE "versionCode|versionName" app/build.gradle
@@ -58,6 +74,10 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../../Zurmelibble.apk
+          # Fail the build if the APK isn't signed with the fixed key (E1:1D:42:28...).
+          unzip -p ../../Zurmelibble.apk 'META-INF/*.RSA' > "$RUNNER_TEMP/cert.rsa"
+          keytool -printcert -file "$RUNNER_TEMP/cert.rsa" | tee /dev/stderr | grep -q "E1:1D:42:28:AE:AA:5C:D9"
+
 
       - uses: actions/upload-artifact@v4
         with:
