@@ -249,12 +249,12 @@
   .hempty { color: var(--muted); font-size: 14px; padding: 6px 2px; }
   @media (max-width: 900px) { .hrow { grid-template-columns: 86px minmax(0, 1fr) auto; } .home-hero h2 { font-size: 22px; } .home-grid { grid-template-columns: minmax(0, 1fr); } .home-grid .span2, .home-grid .span3 { grid-column: auto; } .hstats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-  /* Phones, Home only: logo that docks next to the page title while scrolling */
+  /* Phones: logo centred in the top bar; on Home it starts big above the greeting */
   #homeLogo, .home-logo-slot { display: none; }
   @media (max-width: 900px) {
     body.home-logo-on .home-logo-slot { display: block; height: 58px; margin-bottom: 10px; }
-    body.home-logo-on #homeLogo { display: block; position: fixed; left: 0; top: 0; z-index: 1000; transform-origin: 0 0; pointer-events: none; will-change: transform; transition: opacity .2s; }
-    body.home-logo-on.side-open #homeLogo { opacity: 0; }
+    body.logo-on #homeLogo { display: block; position: fixed; left: 0; top: 0; z-index: 1000; transform-origin: 0 0; pointer-events: none; will-change: transform; transition: opacity .2s; }
+    body.logo-on.side-open #homeLogo { opacity: 0; }
     #homeLogo .brand-logo { height: 58px; width: auto; }
     #homeLogo .brand-default { display: block; font-size: 40px; line-height: 58px; font-weight: 800; white-space: nowrap; }
     #homeLogo .brand-default > span { color: var(--accent); }
