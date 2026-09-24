@@ -190,3 +190,5 @@ html[data-brand="cefast"] .hrow { border-radius: 12px; }
 html[data-brand="cefast"] .hday .col span { background: rgba(105,157,219,.45); }
 html[data-brand="cefast"] .hday.today .col span { background: var(--cf-sky); }
 html[data-brand="cefast"] .hclock .bigtime { font-size: 48px; }
+html[data-brand="cefast"] #homeLogo .brand-logo { height: 58px; }
+html[data-brand="cefast"] #homeLogo .brand-default { display: none; }
