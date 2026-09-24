@@ -53,18 +53,23 @@ html[data-brand="cefast"] .brand-logo { display: block; height: 34px; width: aut
 html[data-brand="cefast"] .brand-default { display: none; }
 html[data-brand="cefast"] .auth .brand-logo { height: 64px; margin: 4px 0 18px; }
 
-/* Header and tabs: flat deep navy bars, caps with wide tracking */
-html[data-brand="cefast"] header,
-html[data-brand="cefast"] nav { background: rgba(5,13,26,.92); border-color: var(--line); backdrop-filter: blur(14px); }
-html[data-brand="cefast"] nav button, html[data-brand="cefast"] nav button:hover:not(:disabled) {
+/* Sidebar and top bar: deep navy glass, caps with wide tracking */
+html[data-brand="cefast"] #side { background: rgba(5,13,26,.88); border-color: var(--line); backdrop-filter: blur(14px); }
+html[data-brand="cefast"] .topbar { background: rgba(5,13,26,.72); border-color: var(--line); backdrop-filter: blur(14px); }
+html[data-brand="cefast"] .topbar h1 { font-weight: 800; letter-spacing: -.01em; color: #fff; }
+html[data-brand="cefast"] .nav-item, html[data-brand="cefast"] .nav-item:hover:not(:disabled) {
   background: transparent; box-shadow: none;
-  text-transform: uppercase; letter-spacing: .12em; font-size: 12px; font-weight: 700;
-  border-radius: 999px; padding: 9px 16px; color: rgba(255,255,255,.6);
+  text-transform: uppercase; letter-spacing: .12em; font-size: 11.5px; font-weight: 700;
+  border-radius: 14px; padding: 10px 12px; color: rgba(255,255,255,.62);
 }
-html[data-brand="cefast"] nav button:hover:not(:disabled) { color: #fff; }
-html[data-brand="cefast"] nav button.active, html[data-brand="cefast"] nav button.active:hover { background: rgba(105,157,219,.14); color: var(--cf-sky); box-shadow: inset 0 0 0 1px rgba(105,157,219,.38); }
+html[data-brand="cefast"] .nav-item:hover:not(:disabled) { color: #fff; background: rgba(255,255,255,.05); }
+html[data-brand="cefast"] .nav-item.active, html[data-brand="cefast"] .nav-item.active:hover { background: rgba(105,157,219,.14); color: var(--cf-sky); box-shadow: inset 0 0 0 1px rgba(105,157,219,.38); }
+html[data-brand="cefast"] .side-sec { color: var(--cf-sky); letter-spacing: .24em; font-size: 10.5px; }
+html[data-brand="cefast"] .side-brand .brand-logo { height: 38px; }
 html[data-brand="cefast"] .who b { font-weight: 700; }
-html[data-brand="cefast"] .who button { white-space: nowrap; padding: 7px 14px; font-size: 11px; }
+html[data-brand="cefast"] .who button, html[data-brand="cefast"] .side-foot button { white-space: nowrap; padding: 7px 14px; font-size: 11px; }
+html[data-brand="cefast"] .icon-btn, html[data-brand="cefast"] .icon-btn:hover:not(:disabled) { background: transparent; box-shadow: none; padding: 6px; border-radius: 12px; color: #fff; }
+html[data-brand="cefast"] .icon-btn:hover:not(:disabled) { background: rgba(255,255,255,.08); }
 @media (max-width: 560px) { html[data-brand="cefast"] #meRole { display: none; } html[data-brand="cefast"] .brand-logo { height: 28px; } }
 
 /* Surfaces: 24px radius, translucent fill, hairline border, no shadow on the star field */
@@ -85,8 +90,8 @@ html[data-brand="cefast"] button {
   border-radius: 999px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; font-size: 13px;
   background: var(--cf-blue-900); transition: background 140ms var(--cf-ease), box-shadow 140ms var(--cf-ease), transform 140ms var(--cf-ease);
 }
-html[data-brand="cefast"] button:not(.b-in):not(.b-out):not(.b-brk):not(.b-ghost):hover:not(:disabled) { background: var(--cf-blue-hover); box-shadow: 0 0 0 1px rgba(105,157,219,.35), 0 12px 40px rgba(105,157,219,.18); }
-html[data-brand="cefast"] button:not(.b-in):not(.b-out):not(.b-brk):not(.b-ghost):active:not(:disabled) { background: var(--cf-blue-press); }
+html[data-brand="cefast"] button:not(.b-in):not(.b-out):not(.b-brk):not(.b-ghost):not(.nav-item):not(.icon-btn):not(.tiny):not(.add-group):not([data-view-btn]):hover:not(:disabled) { background: var(--cf-blue-hover); box-shadow: 0 0 0 1px rgba(105,157,219,.35), 0 12px 40px rgba(105,157,219,.18); }
+html[data-brand="cefast"] button:not(.b-in):not(.b-out):not(.b-brk):not(.b-ghost):not(.nav-item):not(.icon-btn):not(.tiny):not(.add-group):not([data-view-btn]):active:not(:disabled) { background: var(--cf-blue-press); }
 html[data-brand="cefast"] button:active:not(:disabled) { transform: scale(.98); }
 html[data-brand="cefast"] button:disabled { opacity: .4; }
 html[data-brand="cefast"] .b-in { background: var(--cf-green); }
@@ -132,15 +137,40 @@ html[data-brand="cefast"] .err { color: #FF7A6E; }
 html[data-brand="cefast"] .ok { color: #7FD86F; }
 html[data-brand="cefast"] #map { border-radius: 24px; }
 
-/* Board: small inline buttons stay plain, cards sit on the deep navy */
+/* Boards: Plaky-style table and Kanban on the star field */
+html[data-brand="cefast"] {
+  --side: rgba(5,13,26,.88); --hover: rgba(255,255,255,.07); --row: rgba(16,31,58,.82); --row-h: rgba(255,255,255,.05); --pop: #0D1B33;
+  --st-done: var(--cf-green); --st-doing: var(--cf-gold); --st-todo: var(--cf-red); --st-backlog: #4E6378;
+  --pr-high: var(--cf-red); --pr-medium: var(--cf-gold); --pr-low: var(--cf-green);
+}
 html[data-brand="cefast"] button.tiny, html[data-brand="cefast"] button.tiny:hover:not(:disabled) {
   background: transparent; box-shadow: none; color: rgba(255,255,255,.55); text-transform: none; letter-spacing: 0; padding: 2px 6px; font-size: 13px; font-weight: 500;
 }
 html[data-brand="cefast"] button.tiny:hover:not(:disabled) { color: #fff; }
-html[data-brand="cefast"] .klist { border-radius: 20px; background: rgba(255,255,255,.045); }
-html[data-brand="cefast"] .klist-head b { text-transform: uppercase; letter-spacing: .14em; font-size: 12px; color: var(--cf-sky); }
+html[data-brand="cefast"] .views { border-color: rgba(255,255,255,.12); }
+html[data-brand="cefast"] .views button, html[data-brand="cefast"] .views button:hover:not(:disabled) {
+  background: transparent; box-shadow: none; border-radius: 0; color: rgba(255,255,255,.55); font-size: 11.5px; letter-spacing: .14em; padding: 10px 14px;
+}
+html[data-brand="cefast"] .views button:hover:not(:disabled) { color: #fff; }
+html[data-brand="cefast"] .views button.active { color: var(--cf-sky); border-bottom-color: var(--cf-sky); }
+html[data-brand="cefast"] .add-group, html[data-brand="cefast"] .add-group:hover:not(:disabled) { background: transparent; box-shadow: none; border: 1px dashed rgba(255,255,255,.22); color: rgba(255,255,255,.7); font-size: 11.5px; letter-spacing: .12em; border-radius: 999px; }
+html[data-brand="cefast"] .add-group:hover:not(:disabled) { color: #fff; border-color: var(--cf-sky); }
+html[data-brand="cefast"] .grp-head b { font-weight: 800; letter-spacing: .02em; }
+html[data-brand="cefast"] .trow { backdrop-filter: blur(6px); }
+html[data-brand="cefast"] .trow.head { text-transform: uppercase; letter-spacing: .12em; font-size: 10.5px; }
+html[data-brand="cefast"] .trow.head .tcell.title { font-size: 11.5px; }
+html[data-brand="cefast"] .pill { font-weight: 700; letter-spacing: .02em; }
+html[data-brand="cefast"] .range { background: var(--cf-blue-900); box-shadow: inset 0 0 0 1px rgba(105,157,219,.5); }
+html[data-brand="cefast"] .kcol { border-radius: 20px; background: rgba(255,255,255,.045); }
+html[data-brand="cefast"] .kcol-head { text-transform: uppercase; letter-spacing: .14em; font-size: 11.5px; }
 html[data-brand="cefast"] .kcard { border-radius: 14px; background: rgba(5,13,26,.85); }
-html[data-brand="cefast"] .kcard-tags { text-transform: uppercase; letter-spacing: .12em; font-size: 10px; }
-html[data-brand="cefast"] .kav { background: var(--cf-blue-900); box-shadow: inset 0 0 0 1px rgba(105,157,219,.5); }
-html[data-brand="cefast"] dialog#cardDlg { border-radius: 24px; background: #0A1730; }
-html[data-brand="cefast"] #cardDlg textarea { border-radius: 16px; background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.14); }
+html[data-brand="cefast"] .kcard-tag { text-transform: uppercase; letter-spacing: .12em; font-size: 10px; }
+html[data-brand="cefast"] .addrow input:hover, html[data-brand="cefast"] .addrow input:focus { box-shadow: none; }
+html[data-brand="cefast"] .btools .search input { border-radius: 999px; }
+html[data-brand="cefast"] #pop { border-radius: 16px; border-color: rgba(105,157,219,.3); }
+html[data-brand="cefast"] dialog#cardDlg { background: #0A1730; border-color: rgba(105,157,219,.25); }
+html[data-brand="cefast"] dialog#impDlg { border-radius: 24px; background: #0A1730; }
+html[data-brand="cefast"] #cTitle { font-weight: 800; }
+html[data-brand="cefast"] .dsec { color: var(--cf-sky); letter-spacing: .24em; font-size: 10.5px; }
+html[data-brand="cefast"] dialog textarea { border-radius: 16px; background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.14); color: #fff; }
+html[data-brand="cefast"] .subline { background: rgba(255,255,255,.05); border-radius: 12px; }
