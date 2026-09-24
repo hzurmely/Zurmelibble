@@ -1588,11 +1588,16 @@ function placeHomeLogo() {
   document.body.classList.toggle('home-logo-on', home);
   if (!on) { $('pageTitle').style.maxWidth = ''; return; }
   const h0 = el.offsetHeight, w0 = el.offsetWidth; if (!h0) return;
-  const title = $('pageTitle').getBoundingClientRect();
-  const endH = 30, s1 = endH / h0;
-  const endLeft = (innerWidth - w0 * s1) / 2, endTop = title.top + (title.height - endH) / 2;
-  // Keep a long page title from running under the logo.
-  $('pageTitle').style.maxWidth = Math.max(40, endLeft - title.left - 10) + 'px';
+  const pt = $('pageTitle');
+  pt.style.maxWidth = '';
+  const title = pt.getBoundingClientRect();
+  const endH = 30, s1 = endH / h0, w1 = w0 * s1;
+  const endTop = title.top + (title.height - endH) / 2;
+  // Centred, unless the page title reaches it: then the logo moves right of the title.
+  // Only if there's no room before the avatar does the title get cut short with "…".
+  const av = $('meAv').getBoundingClientRect(), limit = (av.width ? av.left : innerWidth) - 10;
+  let endLeft = Math.max((innerWidth - w1) / 2, title.right + 12);
+  if (endLeft + w1 > limit) { endLeft = limit - w1; pt.style.maxWidth = Math.max(40, endLeft - 12 - title.left) + 'px'; }
   let x = endLeft, y = endTop, sc = s1;
   if (home) {
     // Shrink and slide over first (so it never covers the title), rise into the bar over the whole scroll.
