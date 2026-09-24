@@ -39,8 +39,9 @@ let shifts = [];          // shifts visible to me
 let userUnsubs = [], orgUnsubs = [], dataUnsubs = [];
 let dataKey = '';
 let tab = 'clock';
-let directory = [], lists = [], cards = [], listsLoaded = false, creatingLists = false;
-let boardTeam = '', boardSub = '', boardMine = false, boardSearch = '', dragging = false, boardSortables = [];
+let directory = [], lists = [], cards = [];
+let boardTeam = '', boardMine = false, boardSearch = '', dragging = false, boardSortables = [];
+try { boardTeam = localStorage.getItem('zb-board') || ''; } catch (e) {}
 let onboarding = false;   // user chose "create or join another"
 let map = null, mapLayer = null;
 const pendingJoin = (new URLSearchParams(location.search).get('join') || '').toUpperCase();
@@ -293,13 +294,14 @@ function openOrg(id) {
 
 function subscribeData() {
   stop(dataUnsubs);
-  members = []; teams = []; shifts = []; directory = []; lists = []; cards = []; listsLoaded = false;
+  members = []; teams = []; shifts = []; directory = []; lists = []; cards = [];
   if (!isActive()) { render(); return; }
   const onErr = err => console.error(err);
-  // Board data: everyone in the organisation shares one board.
+  // Board data: everyone in the organisation sees every team's board.
   dataUnsubs.push(onSnapshot(orgCol('members'), s => { directory = s.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => m.role !== 'pending').sort((x, y) => (x.name || '').localeCompare(y.name || '')); render(); }, onErr));
-  dataUnsubs.push(onSnapshot(orgCol('lists'), s => { lists = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((x, y) => x.order - y.order); listsLoaded = true; render(); }, onErr));
-  dataUnsubs.push(onSnapshot(query(orgCol('cards'), limit(3000)), s => { cards = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, onErr));
+  // Lists only matter for cards made on the old Trello-style board (their status comes from the list).
+  dataUnsubs.push(onSnapshot(orgCol('lists'), s => { lists = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, onErr));
+  dataUnsubs.push(onSnapshot(query(orgCol('cards'), limit(5000)), s => { cards = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, onErr));
   dataUnsubs.push(onSnapshot(orgCol('teams'), s => { teams = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name)); render(); }, onErr));
   const setShifts = s => { shifts = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.start - a.start); render(); };
   const setMembers = s => { members = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); };
@@ -322,7 +324,12 @@ function setScreen(name) {
   show($('pendingView'), name === 'pending');
   show($('reviewView'), name === 'review');
   show($('platformView'), name === 'platform');
-  show($('tabs'), name === 'app');
+  document.body.classList.toggle('noside', name !== 'app');
+  // In the app the organisation switcher and Sign out live in the sidebar; elsewhere in the top bar.
+  if (name === 'app') { if ($('orgSwitch').parentNode.id !== 'sideOrgBox') { $('sideOrgBox').append($('orgSwitch')); $('sideFoot').append($('signOut')); } }
+  else if ($('orgSwitch').parentNode.id !== 'whoBox') { $('whoBox').prepend($('orgSwitch')); $('whoBox').append($('signOut')); }
+  show($('meAv'), name === 'app');
+  if (name !== 'app') document.body.classList.remove('side-open');
   document.querySelectorAll('[data-view]').forEach(v => show(v, name === 'app' && v.dataset.view === tab));
 }
 
@@ -575,7 +582,7 @@ function renderPeople() {
   }).join(''); labelCells($('people'));
 }
 
-async function safe(fn) { try { await fn(); } catch (err) { alert(niceError(err)); render(); } }
+async function safe(fn) { try { return await fn(); } catch (err) { alert(niceError(err)); render(); } }
 
 $('people').onchange = e => {
   const t = e.target;
@@ -780,17 +787,22 @@ function render() {
       ? `${org.name} was sent to Zurmelibble for approval. You'll be able to invite people and clock in as soon as it's approved. This page updates by itself.`
       : `${org.name} wasn't approved by Zurmelibble, so it can't be used right now.`;
     show($('deleteOrgReq'), owner); show($('leaveReviewOrg'), !owner);
-    show($('tabs'), false);
     setScreen('review'); return;
   }
   document.querySelectorAll('[data-need]').forEach(el => show(el, el.dataset.need === 'super' ? isSuper() : el.dataset.need === 'admin' ? isAdmin() : isStaff()));
-  const allowed = ['clock', 'sheet', 'board', 'settings'].concat(isStaff() ? ['people', 'map'] : [], isAdmin() ? ['teams'] : []);
+  const allowed = ['clock', 'mytasks', 'sheet', 'board', 'settings'].concat(isStaff() ? ['people', 'map'] : [], isAdmin() ? ['teams'] : []);
   if (!allowed.includes(tab)) tab = 'clock';
-  document.querySelectorAll('nav [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.body.classList.toggle('wide', tab === 'board');
+  if (tab === 'board') currentBoard();
+  document.querySelectorAll('#tabs > [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  renderSideBoards();
+  $('meAv').textContent = initials(profile.name || user.email); $('meAv').style.setProperty('--h', hue(profile.name || '')); $('meAv').title = profile.name || '';
+  $('pageTitle').textContent = tab === 'board' ? currentBoard().name : TITLES[tab];
+  document.title = `${tab === 'board' ? currentBoard().name : TITLES[tab]} · ${org?.name || 'Zurmelibble'}`;
+  document.body.classList.toggle('wide', tab === 'board' || tab === 'mytasks');
   setScreen('app');
   startWatch();
-  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap(); renderBoard();
+  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap(); renderBoard(); renderMyTasks();
+  syncDrawer();
 }
 
 // ---------- Organisation awaiting / refused approval ----------
@@ -929,80 +941,186 @@ $('siteList').onclick = e => {
   safe(() => updateDoc(orgRef(), { sites: sites().filter(x => x.id !== s.id) }));
 };
 
-// ---------- Board (Kanban) ----------
+// ---------- Boards (Plaky-style: one board per team, groups = subsystems) ----------
+const STATUSES = [
+  { id: 'backlog', label: 'Backlog', cls: 'st-backlog' },
+  { id: 'todo', label: 'To do', cls: 'st-todo' },
+  { id: 'doing', label: 'In progress', cls: 'st-doing' },
+  { id: 'done', label: 'Done', cls: 'st-done' },
+];
+const PRIOS = [
+  { id: 'high', label: 'High', cls: 'pr-high' },
+  { id: 'medium', label: 'Medium', cls: 'pr-medium' },
+  { id: 'low', label: 'Low', cls: 'pr-low' },
+];
+const GROUP_COLORS = ['#3d7cf5', '#c99700', '#e2445c', '#8e5bd6', '#6aa84f', '#ff7043', '#00a3b4', '#a1887f'];
+const NO_GROUP_COLOR = '#8a8aa3';
+const SUB_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v10a3 3 0 0 0 3 3h9"/><path d="m15 14 3 3-3 3"/></svg>';
+const BOARD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/></svg>';
+let boardView = 'table', boardHideDone = false, mtSearch = '', mtDone = false;
+try { boardView = localStorage.getItem('zb-bview') === 'kanban' ? 'kanban' : 'table'; } catch (e) {}
+const collapsed = new Set(), openSubs = new Set();
+
 const subsOf = teamId => teams.find(t => t.id === teamId)?.subsystems || [];
 const subName = (teamId, subId) => subsOf(teamId).find(s => s.id === subId)?.name || '';
 const personName = uid => directory.find(m => m.uid === uid)?.name || 'Former member';
-const initials = n => (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+const initials = n => (n || '?').split(/[\s._-]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
+const hue = n => [...(n || '')].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
 const canDeleteCard = c => isStaff() || c.createdBy === user.uid;
-function dueInfo(due) {
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+// Cards from the old Trello-style board have a list instead of a status.
+function cardStatus(c) {
+  if (STATUSES.some(s => s.id === c.status)) return c.status;
+  const n = norm(lists.find(l => l.id === c.listId)?.name);
+  return /done|feito|conclu|pronto/.test(n) ? 'done' : /doing|progress|andamento|fazendo/.test(n) ? 'doing' : 'todo';
+}
+const statusInfo = c => STATUSES.find(s => s.id === cardStatus(c));
+const prioInfo = c => PRIOS.find(p => p.id === c.priority) || null;
+function dueInfo(due, done) {
   if (!due) return null;
   const d = new Date(due + 'T23:59:59'), days = (d - Date.now()) / 864e5;
-  return { label: new Date(due + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'short' }), cls: days < 0 ? 'overdue' : days < 2 ? 'soon' : '' };
+  const label = new Date(due + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'short', ...(new Date(due).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) });
+  return { label, cls: done ? 'done' : days < 0 ? 'overdue' : days < 2 ? 'soon' : '' };
 }
-function visibleCards(listId) {
-  const q = boardSearch.toLowerCase();
-  return cards.filter(c => c.listId === listId
-    && (!boardTeam || (boardTeam === '__none' ? !c.teamId : c.teamId === boardTeam))
-    && (!boardSub || c.subsystemId === boardSub)
-    && (!boardMine || (c.assignees || []).includes(user.uid))
-    && (!q || (c.title || '').toLowerCase().includes(q) || (c.desc || '').toLowerCase().includes(q)))
-    .sort((x, y) => (x.order ?? 0) - (y.order ?? 0));
+const childrenOf = id => cards.filter(c => c.parentId === id).sort((x, y) => (x.order ?? 0) - (y.order ?? 0));
+const isMine = c => (c.assignees || []).includes(user.uid);
+
+// Boards shown in the sidebar: every team, plus "General" for items without a team.
+function boardList() {
+  const list = teams.map(t => ({ id: t.id, name: t.name }));
+  if (!teams.length || cards.some(c => !c.parentId && (!c.teamId || !teams.some(t => t.id === c.teamId)))) list.push({ id: '__none', name: 'General' });
+  return list;
 }
-function cardHtml(c) {
-  const tag = [c.teamId ? teamName(c.teamId) : '', c.subsystemId ? subName(c.teamId, c.subsystemId) : ''].filter(Boolean).join(' · ');
-  const due = dueInfo(c.due);
-  const avs = (c.assignees || []).slice(0, 4).map(u => `<span class="kav" title="${esc(personName(u))}">${esc(initials(personName(u)))}</span>`).join('');
-  return `<div class="kcard" data-card="${c.id}">
-    ${tag ? `<div class="kcard-tags">${esc(tag)}</div>` : ''}
-    <div class="kcard-title">${esc(c.title)}</div>
-    ${(due || c.desc || avs) ? `<div class="kcard-meta">${due ? `<span class="kdue ${due.cls}">Due ${esc(due.label)}</span>` : ''}${c.desc ? '<span title="Has a description">≡</span>' : ''}<span class="kavs">${avs}</span></div>` : ''}
+function currentBoard() {
+  const list = boardList();
+  if (!list.some(b => b.id === boardTeam)) boardTeam = list.find(b => b.id === myMember?.teamId)?.id || list[0]?.id || '__none';
+  return list.find(b => b.id === boardTeam) || { id: '__none', name: 'General' };
+}
+const onBoard = (c, bid) => bid === '__none' ? (!c.teamId || !teams.some(t => t.id === c.teamId)) : c.teamId === bid;
+function boardGroups(bid, items) {
+  const subs = bid === '__none' ? [] : subsOf(bid);
+  const groups = subs.map((s, i) => ({ id: s.id, name: s.name, color: GROUP_COLORS[i % GROUP_COLORS.length] }));
+  if (!groups.length || items.some(c => !groups.some(g => g.id === c.subsystemId))) groups.push({ id: '', name: groups.length ? 'No group' : 'Items', color: NO_GROUP_COLOR });
+  return groups;
+}
+const inGroup = (c, g, groups) => g.id ? c.subsystemId === g.id : !groups.some(x => x.id && x.id === c.subsystemId);
+function matches(c) {
+  const q = norm(boardSearch);
+  const kids = childrenOf(c.id);
+  if (boardMine && !isMine(c) && !kids.some(isMine)) return false;
+  if (boardHideDone && cardStatus(c) === 'done') return false;
+  if (q && !norm(c.title).includes(q) && !norm(c.desc).includes(q) && !kids.some(k => norm(k.title).includes(q))) return false;
+  return true;
+}
+
+function peopleHtml(c) {
+  const ppl = [...(c.assignees || []).map(u => ({ n: personName(u) })), ...(c.assigneeNames || []).map(n => ({ n, ext: true }))];
+  if (!ppl.length) return '<span class="pp-empty">+</span>';
+  const av = p => `<span class="av${p.ext ? ' ext' : ''}" style="--h:${hue(p.n)}" title="${esc(p.n)}${p.ext ? ' (not in Zurmelibble yet)' : ''}">${esc(initials(p.n))}</span>`;
+  return `<span class="avs">${ppl.slice(0, 3).map(av).join('')}${ppl.length > 3 ? `<span class="av more" title="${esc(ppl.slice(3).map(p => p.n).join(', '))}">+${ppl.length - 3}</span>` : ''}</span>`;
+}
+function rowHtml(c, sub) {
+  const st = statusInfo(c), pr = prioInfo(c), due = dueInfo(c.due, st.id === 'done');
+  const kids = sub ? [] : childrenOf(c.id), open = openSubs.has(c.id);
+  return `<div class="trow" data-card="${c.id}">
+    <div class="tcell title">${sub ? '' : '<span class="grip" title="Drag to move">⋮⋮</span>'}<span class="ttl" data-open="${c.id}" title="${esc(c.title)}">${esc(c.title)}</span>${c.desc ? '<span class="hasdesc" title="Has notes">≡</span>' : ''}
+      ${sub ? '' : `<span class="subtog${open ? ' open' : ''}${kids.length ? '' : ' none'}" data-subtog="${c.id}" title="${kids.length ? 'Show subitems' : 'Add subitems'}">${SUB_ICON}${kids.length || ''}</span>`}</div>
+    <div class="tcell"><span class="pill ${st.cls}" data-pop="status" data-id="${c.id}">${st.label}</span></div>
+    <div class="tcell date ${due?.cls || ''}"><span>${due ? esc(due.label) : ''}</span><input type="date" value="${c.due || ''}" data-date="${c.id}" aria-label="Due date"></div>
+    <div class="tcell ppl" data-pop="people" data-id="${c.id}">${peopleHtml(c)}</div>
+    <div class="tcell"><span class="pill ${pr ? pr.cls : 'empty'}" data-pop="prio" data-id="${c.id}">${pr ? pr.label : '+'}</span></div>
   </div>`;
 }
-function renderBoardFilters() {
-  const tSel = $('bTeam'), sSel = $('bSub');
-  tSel.innerHTML = '<option value="">All teams</option><option value="__none">No team</option>' + teams.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
-  tSel.value = [...tSel.options].some(o => o.value === boardTeam) ? boardTeam : (boardTeam = '');
-  const subs = boardTeam && boardTeam !== '__none' ? subsOf(boardTeam) : [];
-  sSel.innerHTML = '<option value="">All subsystems</option>' + subs.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
-  sSel.value = subs.some(s => s.id === boardSub) ? boardSub : (boardSub = '');
-  show(sSel, subs.length > 0);
-  $('bMine').checked = boardMine;
+const HEAD_COLS = '<div class="tcell">Status</div><div class="tcell">Due date</div><div class="tcell">People</div><div class="tcell">Priority</div>';
+function itemHtml(c) {
+  let html = rowHtml(c, false);
+  if (openSubs.has(c.id)) {
+    const kids = childrenOf(c.id);
+    html += `<div class="subs"><div class="trow head"><div class="tcell title">Subitem</div>${HEAD_COLS}</div>
+      ${kids.map(k => rowHtml(k, true)).join('')}
+      <form class="addrow" data-addsub="${c.id}"><input placeholder="+ Add subitem" maxlength="200"></form></div>`;
+  }
+  return `<div class="titem" data-card="${c.id}">${html}</div>`;
+}
+function barHtml(items, key, defs) {
+  if (!items.length) return '';
+  const counts = defs.map(d => ({ d, n: items.filter(c => key(c) === d.id).length })).filter(x => x.n);
+  return `<div class="bar" title="${esc(counts.map(x => `${x.d.label}: ${x.n}`).join(' · '))}">${counts.map(x => `<span class="${x.d.cls}" style="width:${(x.n / items.length) * 100}%"></span>`).join('')}</div>`;
+}
+function groupHtml(bid, g, items) {
+  const key = bid + '|' + g.id, isColl = collapsed.has(key);
+  const dues = items.map(c => c.due).filter(Boolean).sort();
+  const fmt = d => new Date(d + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'short' });
+  const range = dues.length ? (dues[0] === dues.at(-1) ? fmt(dues[0]) : `${fmt(dues[0])} – ${fmt(dues.at(-1))}`) : '';
+  const summary = `<div class="sumrow"><div></div><div>${barHtml(items, cardStatus, STATUSES)}</div><div>${range ? `<span class="range">${range}</span>` : ''}</div><div></div><div>${barHtml(items, c => c.priority, PRIOS)}</div></div>`;
+  return `<div class="grp${isColl ? ' collapsed' : ''}" style="--g:${g.color}" data-group="${g.id}">
+    <div class="grp-head"><span class="chev" data-gcoll="${esc(key)}">▼</span><b>${esc(g.name)}</b><span class="n">${items.length} item${items.length === 1 ? '' : 's'}</span>
+      ${isAdmin() && g.id ? `<button type="button" class="tiny" data-gmenu="${g.id}" title="Group options">•••</button>` : ''}</div>
+    ${isColl ? summary : `<div class="trow head"><div class="tcell title">Item</div>${HEAD_COLS}</div>
+    <div class="gbody" data-group="${g.id}">${items.map(itemHtml).join('')}</div>
+    <form class="addrow" data-addgroup="${g.id}"><input placeholder="+ Add item" maxlength="200"></form>
+    ${summary}`}
+  </div>`;
+}
+function kanbanHtml(bid, groups, items) {
+  const gOf = c => groups.find(g => inGroup(c, g, groups)) || groups.at(-1);
+  return `<div class="kan">${STATUSES.map(s => {
+    const col = items.filter(c => cardStatus(c) === s.id);
+    return `<div class="kcol"><div class="kcol-head ${s.cls}">${s.label}<span class="n">${col.length}</span></div>
+      <div class="kcol-cards" data-status="${s.id}">${col.map(c => {
+        const g = gOf(c), pr = prioInfo(c), due = dueInfo(c.due, s.id === 'done'), kids = childrenOf(c.id);
+        return `<div class="kcard" data-card="${c.id}" style="--g:${g.color}">
+          <div class="kcard-tag">${esc(g.name)}</div>
+          <div class="kcard-title">${esc(c.title)}</div>
+          <div class="kcard-meta">${pr ? `<span class="pill sm ${pr.cls}">${pr.label}</span>` : ''}${due ? `<span class="kdue ${due.cls}">${esc(due.label)}</span>` : ''}${kids.length ? `<span title="Subitems">${kids.filter(k => cardStatus(k) === 'done').length}/${kids.length} ✓</span>` : ''}${c.desc ? '<span title="Has notes">≡</span>' : ''}${(c.assignees || []).length || (c.assigneeNames || []).length ? peopleHtml(c) : ''}</div>
+        </div>`;
+      }).join('')}</div>
+      <form class="kadd" data-status="${s.id}"><input placeholder="+ Add item" maxlength="200"></form></div>`;
+  }).join('')}</div>`;
+}
+
+function renderSideBoards() {
+  const list = isActive() ? boardList() : [];
+  $('sideBoards').innerHTML = list.map(b => `<button class="nav-item${tab === 'board' && b.id === boardTeam ? ' active' : ''}" data-tab="board" data-board="${b.id}">${BOARD_ICON}<span>${esc(b.name)}</span></button>`).join('')
+    || '<div class="muted" style="padding:4px 10px;font-size:13px">No boards yet</div>';
+}
+function boardBusy() {
+  const a = document.activeElement;
+  return dragging || !!(a && a.closest && a.closest('#board') && a.matches('input:not([type=date]):not([type=checkbox])') && a.value);
 }
 function renderBoard() {
   if (tab !== 'board' || !isActive()) return;
-  if (dragging || document.activeElement?.closest?.('.kadd')) return;
-  renderBoardFilters();
-  // First visit by an admin: set up the default lists.
-  if (listsLoaded && !lists.length && isAdmin() && !creatingLists) {
-    creatingLists = true;
-    const b = writeBatch(db);
-    ['To do', 'Doing', 'Done'].forEach((name, i) => b.set(doc(orgCol('lists')), { name, order: (i + 1) * 1024, createdAt: Date.now() }));
-    b.commit().catch(err => console.error(err)).finally(() => { creatingLists = false; });
-  }
-  show($('boardEmpty'), listsLoaded && !lists.length && !isAdmin());
-  $('boardEmpty').textContent = 'The board has no lists yet. An admin needs to open the Board once to set it up.';
+  if (boardBusy()) return;
+  const b = currentBoard();
+  document.querySelectorAll('[data-view-btn]').forEach(x => x.classList.toggle('active', x.dataset.viewBtn === boardView));
+  $('bMine').checked = boardMine; $('bHideDone').checked = boardHideDone;
+  const all = cards.filter(c => !c.parentId && onBoard(c, b.id));
+  const items = all.filter(matches).sort((x, y) => (x.order ?? 0) - (y.order ?? 0));
+  const groups = boardGroups(b.id, all);
+  const focused = document.activeElement?.closest?.('#board form') ? [...$('board').querySelectorAll('form')].indexOf(document.activeElement.closest('form')) : -1;
   boardSortables.forEach(s => s.destroy()); boardSortables = [];
-  $('board').innerHTML = lists.map(l => {
-    const vc = visibleCards(l.id);
-    return `<div class="klist ${isAdmin() ? 'admin' : ''}" data-list="${l.id}">
-      <div class="klist-head"><b>${esc(l.name)}</b><span class="n">${vc.length}</span>
-        ${isAdmin() ? `<button class="tiny" data-lren="${l.id}" title="Rename list">✎</button><button class="tiny" data-ldel="${l.id}" title="Delete list">✕</button>` : ''}</div>
-      <div class="klist-cards" data-list="${l.id}">${vc.map(cardHtml).join('')}</div>
-      <form class="kadd" data-list="${l.id}"><input placeholder="Add a card" maxlength="200"></form>
-    </div>`;
-  }).join('');
+  if (boardView === 'kanban') {
+    $('board').innerHTML = kanbanHtml(b.id, groups, items);
+  } else {
+    $('board').innerHTML = `<div class="tscroll"><div class="tgrid">${groups.map(g => groupHtml(b.id, g, items.filter(c => inGroup(c, g, groups)))).join('')}</div></div>
+      ${isAdmin() && b.id !== '__none' ? '<button type="button" class="add-group" id="bAddGroup">＋ Add new group</button>' : ''}`;
+  }
+  if (focused >= 0) $('board').querySelectorAll('form')[focused]?.querySelector('input')?.focus();
+  show($('boardEmpty'), !all.length && !boardSearch);
+  $('boardEmpty').textContent = `No items on ${b.name} yet. Type in "+ Add item" or press New item.`;
   if (!window.Sortable) return;
-  const common = { animation: 150, forceFallback: true, fallbackTolerance: 4, delay: 180, delayOnTouchOnly: true,
-    onStart: () => { dragging = true; }, onEnd: () => { dragging = false; setTimeout(render, 0); } };
-  document.querySelectorAll('.klist-cards').forEach(el => boardSortables.push(new Sortable(el, {
-    ...common, group: 'cards', draggable: '.kcard',
-    onEnd: ev => { dragging = false; moveCard(ev.item, ev.to); }
-  })));
-  if (isAdmin()) boardSortables.push(new Sortable($('board'), {
-    ...common, draggable: '.klist', handle: '.klist-head',
-    onEnd: () => { dragging = false; reorderLists(); }
-  }));
+  const common = { animation: 150, forceFallback: true, fallbackTolerance: 4, delay: 180, delayOnTouchOnly: true, onStart: () => { dragging = true; } };
+  if (boardView === 'kanban') {
+    document.querySelectorAll('.kcol-cards').forEach(el => boardSortables.push(new Sortable(el, {
+      ...common, group: 'kan', draggable: '.kcard',
+      onEnd: ev => { dragging = false; moveItem(ev.item.dataset.card, ev.to, '.kcard', { status: ev.to.dataset.status }); }
+    })));
+  } else {
+    document.querySelectorAll('.gbody').forEach(el => boardSortables.push(new Sortable(el, {
+      ...common, group: 'rows', draggable: '.titem', handle: '.grip', delay: 0,
+      onEnd: ev => { dragging = false; moveItem(ev.item.dataset.card, ev.to, '.titem', { subsystemId: ev.to.dataset.group || null }); }
+    })));
+  }
 }
 function orderBetween(prev, next) {
   if (prev == null && next == null) return 1024;
@@ -1010,103 +1128,381 @@ function orderBetween(prev, next) {
   if (next == null) return prev + 1024;
   return (prev + next) / 2;
 }
-function moveCard(item, toEl) {
-  const id = item.dataset.card, listId = toEl.dataset.list;
-  const ids = [...toEl.querySelectorAll('.kcard')].map(e => e.dataset.card);
+function moveItem(id, toEl, sel, patch) {
+  const ids = [...toEl.querySelectorAll(':scope > ' + sel)].map(e => e.dataset.card);
   const i = ids.indexOf(id);
   const ord = x => cards.find(c => c.id === x)?.order ?? null;
   const order = orderBetween(i > 0 ? ord(ids[i - 1]) : null, i < ids.length - 1 ? ord(ids[i + 1]) : null);
-  const c = cards.find(x => x.id === id);
-  if (c) { c.listId = listId; c.order = order; }   // optimistic
-  safe(() => updateDoc(orgRef('cards', id), { listId, order, updatedAt: Date.now() }));
-  setTimeout(render, 0);
-}
-function reorderLists() {
-  const ids = [...$('board').querySelectorAll('.klist')].map(e => e.dataset.list);
+  const c = cards.find(x => x.id === id); if (!c) return;
+  const kids = childrenOf(id);
+  Object.assign(c, patch, { order });   // optimistic
   safe(async () => {
-    const b = writeBatch(db);
-    ids.forEach((id, i) => { const l = lists.find(x => x.id === id); if (l && l.order !== (i + 1) * 1024) b.update(orgRef('lists', id), { order: (i + 1) * 1024 }); });
-    await b.commit();
+    await updateDoc(orgRef('cards', id), { ...patch, order, updatedAt: Date.now() });
+    // Subitems follow their parent to its new group.
+    if ('subsystemId' in patch) await Promise.all(kids.filter(k => k.subsystemId !== patch.subsystemId).map(k => updateDoc(orgRef('cards', k.id), { subsystemId: patch.subsystemId, updatedAt: Date.now() })));
   });
   setTimeout(render, 0);
 }
+function newCard(fields) {
+  const teamId = fields.teamId !== undefined ? fields.teamId : (boardTeam && boardTeam !== '__none' ? boardTeam : null);
+  const peers = cards.filter(c => (c.parentId || null) === (fields.parentId || null));
+  const order = fields.order ?? Math.max(0, ...peers.map(c => c.order ?? 0)) + 1024;
+  return addDoc(orgCol('cards'), {
+    title: '', desc: '', status: 'todo', priority: null, subsystemId: null, parentId: null, assignees: [], assigneeNames: [], due: null,
+    ...fields, teamId, order, createdBy: user.uid, createdByName: myMember.name, createdAt: Date.now(), updatedAt: Date.now()
+  });
+}
+function deleteCardTree(c) {
+  const kids = childrenOf(c.id);
+  return safe(async () => { const b = writeBatch(db); kids.forEach(k => b.delete(orgRef('cards', k.id))); b.delete(orgRef('cards', c.id)); await b.commit(); });
+}
+const patchCard = (id, patch) => { const c = cards.find(x => x.id === id); if (c) Object.assign(c, patch); render(); return safe(() => updateDoc(orgRef('cards', id), { ...patch, updatedAt: Date.now() })); };
+
 $('board').addEventListener('submit', e => {
-  const f = e.target.closest('.kadd'); if (!f) return;
+  const f = e.target.closest('form'); if (!f) return;
   e.preventDefault();
   const input = f.querySelector('input'), title = input.value.trim(); if (!title) return;
   input.value = '';
-  const listId = f.dataset.list;
-  const max = Math.max(0, ...cards.filter(c => c.listId === listId).map(c => c.order ?? 0));
-  const teamId = boardTeam && boardTeam !== '__none' ? boardTeam : (boardTeam === '__none' ? null : myMember.teamId ?? null);
-  safe(() => addDoc(orgCol('cards'), { title, desc: '', listId, order: max + 1024, teamId, subsystemId: boardSub || null, assignees: [], due: null, createdBy: user.uid, createdByName: myMember.name, createdAt: Date.now(), updatedAt: Date.now() }));
+  if (f.dataset.addsub) {
+    const p = cards.find(c => c.id === f.dataset.addsub);
+    newCard({ title, parentId: p.id, teamId: p.teamId || null, subsystemId: p.subsystemId || null });
+  } else if ('addgroup' in f.dataset) {
+    newCard({ title, subsystemId: f.dataset.addgroup || null });
+  } else if (f.classList.contains('kadd')) {
+    const b = currentBoard(), first = boardGroups(b.id, [])[0];
+    newCard({ title, status: f.dataset.status, subsystemId: first?.id || null });
+  }
 });
-$('board').addEventListener('focusout', e => { if (e.target.closest('.kadd')) setTimeout(() => { if (!document.activeElement?.closest?.('.kadd')) renderBoard(); }, 150); });
+$('board').addEventListener('focusout', e => { if (e.target.closest('form')) setTimeout(() => { if (!document.activeElement?.closest?.('#board form')) renderBoard(); }, 150); });
+$('board').addEventListener('change', e => { const d = e.target.closest('[data-date]'); if (d) patchCard(d.dataset.date, { due: d.value || null }); });
 $('board').addEventListener('click', e => {
-  const ren = e.target.closest('[data-lren]'), del = e.target.closest('[data-ldel]'), card = e.target.closest('.kcard');
-  if (ren) {
-    const l = lists.find(x => x.id === ren.dataset.lren);
-    const name = prompt('List name', l.name)?.trim();
-    if (name) safe(() => updateDoc(orgRef('lists', l.id), { name }));
-  } else if (del) {
-    const l = lists.find(x => x.id === del.dataset.ldel), inList = cards.filter(c => c.listId === l.id);
-    if (!confirm(inList.length ? `Delete the list ${l.name} and its ${inList.length} card(s)?` : `Delete the list ${l.name}?`)) return;
-    safe(async () => { const b = writeBatch(db); inList.forEach(c => b.delete(orgRef('cards', c.id))); b.delete(orgRef('lists', l.id)); await b.commit(); });
-  } else if (card) openCard(card.dataset.card);
+  const t = e.target;
+  const dateIn = t.closest('[data-date]');
+  if (dateIn) { try { dateIn.showPicker(); } catch (err) {} return; }
+  const pop = t.closest('[data-pop]');
+  if (pop) { e.stopPropagation(); openPop(pop.dataset.pop, pop.dataset.id, pop); return; }
+  const tog = t.closest('[data-subtog]');
+  if (tog) { const id = tog.dataset.subtog; openSubs.has(id) ? openSubs.delete(id) : openSubs.add(id); renderBoard(); if (openSubs.has(id) && !childrenOf(id).length) setTimeout(() => $('board').querySelector(`[data-addsub="${id}"] input`)?.focus({ preventScroll: true }), 0); return; }
+  const coll = t.closest('[data-gcoll]');
+  if (coll) { const k = coll.dataset.gcoll; collapsed.has(k) ? collapsed.delete(k) : collapsed.add(k); renderBoard(); return; }
+  const gm = t.closest('[data-gmenu]');
+  if (gm) { e.stopPropagation(); openPop('group', gm.dataset.gmenu, gm); return; }
+  if (t.closest('#bAddGroup')) { addGroup(); return; }
+  const open = t.closest('[data-open]') || (t.closest('.kcard') && { dataset: { open: t.closest('.kcard').dataset.card } });
+  if (open) openCard(open.dataset.open);
 });
-$('bAddList').onclick = () => {
-  const name = prompt('New list name')?.trim(); if (!name) return;
-  const max = Math.max(0, ...lists.map(l => l.order ?? 0));
-  safe(() => addDoc(orgCol('lists'), { name, order: max + 1024, createdAt: Date.now() }));
+function addGroup() {
+  const b = currentBoard(); if (b.id === '__none') return;
+  const name = prompt('New group name, e.g. ADCS')?.trim(); if (!name) return;
+  safe(() => updateDoc(orgRef('teams', b.id), { subsystems: [...subsOf(b.id), { id: Math.random().toString(36).slice(2, 10), name }] }));
+}
+$('bViews').onclick = e => { const v = e.target.closest('[data-view-btn]'); if (!v) return; boardView = v.dataset.viewBtn; try { localStorage.setItem('zb-bview', boardView); } catch (err) {} renderBoard(); };
+$('bNew').onclick = async () => {
+  const b = currentBoard(), first = boardGroups(b.id, [])[0];
+  const ref = await safe(() => newCard({ title: 'New item', subsystemId: first?.id || null }));
+  if (ref?.id) setTimeout(() => { openCard(ref.id); $('cTitle').select(); }, 300);
 };
-$('bTeam').onchange = e => { boardTeam = e.target.value; boardSub = ''; renderBoard(); };
-$('bSub').onchange = e => { boardSub = e.target.value; renderBoard(); };
 $('bMine').onchange = e => { boardMine = e.target.checked; renderBoard(); };
+$('bHideDone').onchange = e => { boardHideDone = e.target.checked; renderBoard(); };
 $('bSearch').oninput = e => { boardSearch = e.target.value.trim(); renderBoard(); };
 
-// Card editor
+// ---------- Popover: status, priority, people, group menu ----------
+let popFor = null;
+function closePop() { $('pop').hidden = true; popFor = null; }
+function openPop(kind, id, anchor) {
+  const pop = $('pop');
+  if (popFor && popFor.kind === kind && popFor.id === id) { closePop(); return; }
+  let html = '';
+  if (kind === 'group') {
+    html = '<div class="opt" data-gact="rename">Rename group</div><div class="opt" data-gact="delete" style="color:var(--out)">Delete group</div>';
+  } else {
+    const c = cards.find(x => x.id === id); if (!c) return;
+    if (kind === 'status') html = STATUSES.map(s => `<span class="pill ${s.cls}" data-set="status" data-val="${s.id}">${s.label}</span>`).join('');
+    if (kind === 'prio') html = PRIOS.map(p => `<span class="pill ${p.cls}" data-set="priority" data-val="${p.id}">${p.label}</span>`).join('') + '<span class="pill empty" data-set="priority" data-val="">Clear</span>';
+    if (kind === 'people') {
+      const opt = (val, n, on, ext) => `<label class="opt"><input type="checkbox" data-person="${esc(val)}" ${ext ? 'data-ext="1"' : ''} ${on ? 'checked' : ''}><span class="av${ext ? ' ext' : ''}" style="--h:${hue(n)}">${esc(initials(n))}</span><span>${esc(n)}</span></label>`;
+      const mine = directory.filter(m => (c.assignees || []).includes(m.uid)), rest = directory.filter(m => !(c.assignees || []).includes(m.uid));
+      html = '<input class="popq" placeholder="Search people">' +
+        mine.map(m => opt(m.uid, m.name, true)).join('') + (c.assigneeNames || []).map(n => opt(n, n, true, true)).join('') +
+        rest.map(m => opt(m.uid, m.name, false)).join('');
+    }
+  }
+  pop.className = kind === 'people' ? 'wide' : '';
+  pop.innerHTML = html; pop.hidden = false; popFor = { kind, id };
+  const r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8)) + 'px';
+  pop.style.top = (r.bottom + h + 8 > innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+  pop.querySelector('.popq')?.focus({ preventScroll: true });
+}
+$('pop').addEventListener('click', e => {
+  e.stopPropagation();
+  const set = e.target.closest('[data-set]');
+  if (set && popFor) { const id = popFor.id; closePop(); patchCard(id, { [set.dataset.set]: set.dataset.val || null }); return; }
+  const g = e.target.closest('[data-gact]');
+  if (g && popFor) {
+    const b = currentBoard(), gid = popFor.id, sub = subsOf(b.id).find(s => s.id === gid); closePop(); if (!sub) return;
+    if (g.dataset.gact === 'rename') {
+      const name = prompt('Group name', sub.name)?.trim();
+      if (name) safe(() => updateDoc(orgRef('teams', b.id), { subsystems: subsOf(b.id).map(s => s.id === gid ? { ...s, name } : s) }));
+    } else {
+      const inIt = cards.filter(c => c.teamId === b.id && c.subsystemId === gid);
+      if (!confirm(inIt.length ? `Delete the group ${sub.name}? Its ${inIt.length} item(s) move to "No group".` : `Delete the group ${sub.name}?`)) return;
+      safe(async () => {
+        await Promise.all(inIt.map(c => updateDoc(orgRef('cards', c.id), { subsystemId: null, updatedAt: Date.now() })));
+        await updateDoc(orgRef('teams', b.id), { subsystems: subsOf(b.id).filter(s => s.id !== gid) });
+      });
+    }
+  }
+});
+$('pop').addEventListener('input', e => {
+  if (!e.target.matches('.popq')) return;
+  const q = norm(e.target.value);
+  $('pop').querySelectorAll('.opt').forEach(o => { o.hidden = q && !norm(o.textContent).includes(q); });
+});
+$('pop').addEventListener('change', e => {
+  const cb = e.target.closest('[data-person]'); if (!cb || !popFor) return;
+  const c = cards.find(x => x.id === popFor.id); if (!c) return;
+  const val = cb.dataset.person;
+  if (cb.dataset.ext) patchCard(c.id, { assigneeNames: cb.checked ? [...new Set([...(c.assigneeNames || []), val])] : (c.assigneeNames || []).filter(n => n !== val) });
+  else patchCard(c.id, { assignees: cb.checked ? [...new Set([...(c.assignees || []), val])] : (c.assignees || []).filter(u => u !== val) });
+});
+document.addEventListener('click', e => { if (!$('pop').hidden && !e.target.closest('#pop')) closePop(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('pop').hidden) closePop(); });
+window.addEventListener('resize', () => { if (!$('pop').hidden) closePop(); });
+document.addEventListener('scroll', e => { if (!$('pop').hidden && !e.target.closest?.('#pop')) closePop(); }, true);
+
+// ---------- Item drawer ----------
 let editing = null;
 function fillCardSubs(teamId, sel) {
   const subs = subsOf(teamId);
-  $('cSub').innerHTML = '<option value="">None</option>' + subs.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  $('cSub').innerHTML = '<option value="">No group</option>' + subs.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
   $('cSub').value = subs.some(s => s.id === sel) ? sel : '';
   $('cSub').disabled = !subs.length;
 }
+function peoplePickHtml(c) {
+  const lab = (val, n, on, ext) => `<label><input type="checkbox" value="${esc(val)}" ${ext ? 'data-ext="1"' : ''} ${on ? 'checked' : ''}><span class="av${ext ? ' ext' : ''}" style="--h:${hue(n)}">${esc(initials(n))}</span>${esc(n)}</label>`;
+  return (c.assigneeNames || []).map(n => lab(n, n, true, true)).join('') + directory.map(m => lab(m.uid, m.name, (c.assignees || []).includes(m.uid))).join('') || '<span class="muted">Nobody yet.</span>';
+}
+function syncDrawer() {
+  const c = cards.find(x => x.id === editing); if (!c || !$('cardDlg').open) return;
+  const parent = c.parentId ? cards.find(x => x.id === c.parentId) : null;
+  const boardNm = c.teamId ? teamName(c.teamId) : 'General', grp = c.subsystemId ? subName(c.teamId, c.subsystemId) : '';
+  $('cCrumb').innerHTML = [esc(boardNm), grp ? esc(grp) : '', parent ? `<a data-goto="${parent.id}">${esc(parent.title)}</a>` : ''].filter(Boolean).join(' › ');
+  show($('cSubsBox'), !c.parentId);
+  const kids = childrenOf(c.id);
+  $('cSubsTitle').textContent = kids.length ? `Subitems (${kids.filter(k => cardStatus(k) === 'done').length}/${kids.length} done)` : 'Subitems';
+  $('cSubs').innerHTML = kids.map(k => { const st = statusInfo(k); return `<div class="subline"><span class="pill ${st.cls}" data-pop="status" data-id="${k.id}">${st.label}</span><span class="ttl" data-goto="${k.id}">${esc(k.title)}</span>${peopleHtml(k)}</div>`; }).join('');
+}
 function openCard(id) {
   const c = cards.find(x => x.id === id); if (!c) return;
+  closePop();
   editing = id;
   $('cTitle').value = c.title || ''; $('cDesc').value = c.desc || ''; $('cDue').value = c.due || ''; $('cErr').textContent = '';
-  $('cList').innerHTML = lists.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join(''); $('cList').value = c.listId;
-  $('cTeam').innerHTML = '<option value="">No team</option>' + teams.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
-  $('cTeam').value = c.teamId || '';
-  fillCardSubs(c.teamId, c.subsystemId);
-  $('cPeople').innerHTML = directory.map(m => `<label><input type="checkbox" value="${m.uid}" ${(c.assignees || []).includes(m.uid) ? 'checked' : ''}>${esc(m.name)}</label>`).join('') || '<span class="muted">Nobody yet.</span>';
-  $('cMeta').textContent = `Created by ${c.createdByName || personName(c.createdBy)} on ${fmtDate(c.createdAt)}`;
+  $('cStatus').innerHTML = STATUSES.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+  $('cPrio').innerHTML = '<option value="">None</option>' + PRIOS.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
+  $('cTeam').innerHTML = '<option value="">General (no team)</option>' + teams.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  $('cTeam').value = c.teamId || ''; $('cTeam').disabled = !!c.parentId;
+  fillCardSubs(c.teamId, c.subsystemId); if (c.parentId) $('cSub').disabled = true;
+  $('cPeople').innerHTML = peoplePickHtml(c);
+  $('cMeta').textContent = c.importedFrom === 'plaky' ? `Imported from Plaky on ${fmtDate(c.createdAt)}` : `Created by ${c.createdByName || personName(c.createdBy)} on ${fmtDate(c.createdAt)}`;
   show($('cDelete'), canDeleteCard(c));
-  $('cardDlg').showModal();
+  $('cAddSub').querySelector('input').value = '';
+  $('cStatus').value = cardStatus(c); $('cPrio').value = c.priority || '';
+  if (!$('cardDlg').open) $('cardDlg').showModal();
+  syncDrawer();
+}
+function drawerPatch() {
+  const c = cards.find(x => x.id === editing); if (!c) return null;
+  const title = $('cTitle').value.trim(); if (!title) return null;
+  const teamId = c.parentId ? (c.teamId || null) : ($('cTeam').value || null);
+  return { title, desc: $('cDesc').value.trim(), status: $('cStatus').value, priority: $('cPrio').value || null, due: $('cDue').value || null,
+    teamId, subsystemId: c.parentId ? (c.subsystemId || null) : ($('cSub').value || null),
+    assignees: [...$('cPeople').querySelectorAll('input:checked:not([data-ext])')].map(i => i.value),
+    assigneeNames: [...$('cPeople').querySelectorAll('input[data-ext]:checked')].map(i => i.value) };
+}
+async function saveDrawer() {
+  const c = cards.find(x => x.id === editing), patch = drawerPatch(); if (!c || !patch) return;
+  await patchCard(c.id, patch);
+  // Subitems stay on their parent's board and group.
+  const kids = childrenOf(c.id).filter(k => k.teamId !== patch.teamId || k.subsystemId !== patch.subsystemId);
+  if (kids.length) safe(() => Promise.all(kids.map(k => updateDoc(orgRef('cards', k.id), { teamId: patch.teamId, subsystemId: patch.subsystemId, updatedAt: Date.now() }))));
 }
 $('cTeam').onchange = e => fillCardSubs(e.target.value, '');
 $('cCancel').onclick = () => $('cardDlg').close();
-$('cardForm').onsubmit = e => {
+$('cardDlg').addEventListener('click', e => {
+  if (e.target === $('cardDlg')) { $('cardDlg').close(); return; }   // backdrop
+  const pop = e.target.closest('[data-pop]');
+  if (pop) { e.stopPropagation(); openPop(pop.dataset.pop, pop.dataset.id, pop); return; }
+  const go = e.target.closest('[data-goto]');
+  if (go) { const patch = drawerPatch(); const cur = cards.find(x => x.id === editing); if (patch && cur && (patch.title !== cur.title || patch.desc !== (cur.desc || ''))) saveDrawer(); openCard(go.dataset.goto); }
+});
+$('cardForm').onsubmit = e => { e.preventDefault(); saveDrawer(); $('cardDlg').close(); };
+$('cAddSub').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
   e.preventDefault();
-  const c = cards.find(x => x.id === editing); if (!c) return;
-  const title = $('cTitle').value.trim(); if (!title) return;
-  const listId = $('cList').value;
-  const patch = { title, desc: $('cDesc').value.trim(), due: $('cDue').value || null, teamId: $('cTeam').value || null, subsystemId: $('cSub').value || null,
-    assignees: [...$('cPeople').querySelectorAll('input:checked')].map(i => i.value), updatedAt: Date.now() };
-  if (listId !== c.listId) { patch.listId = listId; patch.order = Math.max(0, ...cards.filter(x => x.listId === listId).map(x => x.order ?? 0)) + 1024; }
-  $('cardDlg').close();
-  safe(() => updateDoc(orgRef('cards', c.id), patch));
-};
+  const input = e.target, title = input.value.trim(); if (!title) return;
+  const p = cards.find(c => c.id === editing); if (!p) return;
+  input.value = '';
+  newCard({ title, parentId: p.id, teamId: p.teamId || null, subsystemId: p.subsystemId || null });
+});
 $('cDelete').onclick = () => {
   const c = cards.find(x => x.id === editing); if (!c) return;
-  if (!confirm(`Delete the card "${c.title}"?`)) return;
+  const kids = childrenOf(c.id).length;
+  if (!confirm(`Delete "${c.title}"${kids ? ` and its ${kids} subitem(s)` : ''}?`)) return;
   $('cardDlg').close();
-  safe(() => deleteDoc(orgRef('cards', c.id)));
+  deleteCardTree(c);
+};
+$('cardDlg').addEventListener('close', () => { editing = null; closePop(); render(); });
+
+// ---------- My tasks ----------
+function renderMyTasks() {
+  if (tab !== 'mytasks' || !isActive()) return;
+  const q = norm(mtSearch);
+  const mine = cards.filter(c => isMine(c) && (mtDone || cardStatus(c) !== 'done') && (!q || norm(c.title).includes(q)));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = d => Math.round((new Date(d + 'T00:00') - today) / 864e5);
+  const buckets = [
+    { name: 'Overdue', color: '#e2445c', f: c => c.due && day(c.due) < 0 && cardStatus(c) !== 'done' },
+    { name: 'Today', color: '#3d7cf5', f: c => c.due && day(c.due) === 0 },
+    { name: 'Next 7 days', color: '#c99700', f: c => c.due && day(c.due) > 0 && day(c.due) <= 7 },
+    { name: 'Later', color: '#8e5bd6', f: c => c.due && day(c.due) > 7 },
+    { name: 'No due date', color: NO_GROUP_COLOR, f: c => !c.due },
+    { name: 'Done, past due', color: '#6aa84f', f: c => c.due && day(c.due) < 0 && cardStatus(c) === 'done' },
+  ];
+  const where = c => { const p = c.parentId ? cards.find(x => x.id === c.parentId) : null; const bn = c.teamId ? teamName(c.teamId) : 'General'; const g = c.subsystemId ? subName(c.teamId, c.subsystemId) : ''; return [bn, g, p?.title].filter(Boolean).join(' › '); };
+  const row = c => {
+    const st = statusInfo(c), pr = prioInfo(c), due = dueInfo(c.due, st.id === 'done');
+    return `<div class="trow" data-card="${c.id}"><div class="tcell title"><span class="ttl" data-open="${c.id}" title="${esc(c.title)}">${esc(c.title)}</span></div>
+      <div class="tcell board-name" title="${esc(where(c))}">${esc(where(c))}</div>
+      <div class="tcell"><span class="pill ${st.cls}" data-pop="status" data-id="${c.id}">${st.label}</span></div>
+      <div class="tcell date ${due?.cls || ''}"><span>${due ? esc(due.label) : ''}</span><input type="date" value="${c.due || ''}" data-date="${c.id}" aria-label="Due date"></div>
+      <div class="tcell"><span class="pill ${pr ? pr.cls : 'empty'}" data-pop="prio" data-id="${c.id}">${pr ? pr.label : '+'}</span></div></div>`;
+  };
+  $('myTasks').innerHTML = `<div class="tscroll"><div class="tgrid">${buckets.map(b => {
+    const list = mine.filter(b.f).sort((x, y) => (x.due || '9').localeCompare(y.due || '9') || (x.order ?? 0) - (y.order ?? 0));
+    return list.length ? `<div class="grp" style="--g:${b.color}"><div class="grp-head"><b>${b.name}</b><span class="n">${list.length}</span></div>
+      <div class="trow head"><div class="tcell title">Item</div><div class="tcell">Board</div><div class="tcell">Status</div><div class="tcell">Due date</div><div class="tcell">Priority</div></div>
+      ${list.map(row).join('')}</div>` : '';
+  }).join('')}</div></div>`;
+  show($('myTasksEmpty'), !mine.length);
+}
+$('myTasks').addEventListener('click', e => {
+  const dateIn = e.target.closest('[data-date]'); if (dateIn) { try { dateIn.showPicker(); } catch (err) {} return; }
+  const pop = e.target.closest('[data-pop]'); if (pop) { e.stopPropagation(); openPop(pop.dataset.pop, pop.dataset.id, pop); return; }
+  const o = e.target.closest('[data-open]'); if (o) openCard(o.dataset.open);
+});
+$('myTasks').addEventListener('change', e => { const d = e.target.closest('[data-date]'); if (d) patchCard(d.dataset.date, { due: d.value || null }); });
+$('mtSearch').oninput = e => { mtSearch = e.target.value.trim(); renderMyTasks(); };
+$('mtDone').onchange = e => { mtDone = e.target.checked; renderMyTasks(); };
+
+// ---------- Import from Plaky (admins) ----------
+const PLAKY_STATUS = { 'feito': 'done', 'pronto': 'done', 'done': 'done', 'em progresso': 'doing', 'working on it': 'doing', 'a fazer': 'todo', 'to do': 'todo', 'backlog': 'backlog', 'parado': 'todo', 'stuck': 'todo' };
+const PLAKY_PRIO = { 'alta': 'high', 'high': 'high', 'media': 'medium', 'medium': 'medium', 'baixa': 'low', 'low': 'low' };
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTHS_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+function plakyDate(s, year) {
+  const m = norm(s).match(/^([a-z]{3})[a-z]*\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?$/) || norm(s).match(/^(\d{1,2})\s+(?:de\s+)?([a-z]{3})[a-z]*\.?(?:\s+(?:de\s+)?(\d{4}))?$/);
+  if (!m) return null;
+  let mon, d, y;
+  if (/^\d/.test(m[1])) { d = +m[1]; mon = m[2]; y = m[3]; } else { mon = m[1]; d = +m[2]; y = m[3]; }
+  let mi = MONTHS.indexOf(mon); if (mi < 0) mi = MONTHS_PT.indexOf(mon); if (mi < 0) return null;
+  return `${y || year}-${String(mi + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+function matchMember(name) {
+  const k = norm(name), toks = k.split(/\s+/);
+  return directory.find(m => norm(m.name) === k) ||
+    directory.find(m => norm((m.email || '').split('@')[0]) === k) ||
+    (toks.length > 1 ? directory.find(m => { const t = norm(m.name).split(/\s+/); return t[0] === toks[0] && t.at(-1) === toks.at(-1); }) : null) || null;
+}
+function parseImport(text) {
+  const data = JSON.parse(text);
+  const boards = Array.isArray(data.boards) ? data.boards : Object.entries(data.boards || data).map(([name, rows]) => ({ name, rows }));
+  if (!boards.length || !boards.every(b => b.name && Array.isArray(b.rows))) throw new Error('This does not look like a Plaky export.');
+  return boards;
+}
+const importKey = (board, row) => norm([board, row[0], row[1], row[2]].join('|'));
+function previewImport() {
+  $('impErr').textContent = ''; $('impGo').disabled = true;
+  const text = $('impText').value.trim();
+  if (!text) { $('impPreview').textContent = ''; return null; }
+  try {
+    const boards = parseImport(text);
+    const done = new Set(cards.map(c => c.importKey).filter(Boolean));
+    const people = new Set(); boards.forEach(b => b.rows.forEach(r => (r[5] || []).forEach(p => people.add(p))));
+    const matched = [...people].filter(matchMember);
+    const lines = boards.map(b => {
+      const team = teams.find(t => norm(t.name) === norm(b.name));
+      const fresh = b.rows.filter(r => !done.has(importKey(b.name, r))).length;
+      return `<b>${esc(b.name)}</b>${team ? '' : ' (new board)'}: ${fresh} new of ${b.rows.length} items, groups ${esc([...new Set([...(b.groups || []), ...b.rows.map(r => r[0])])].join(', '))}`;
+    });
+    $('impPreview').innerHTML = lines.join('<br>') + `<br>People: ${matched.length} of ${people.size} matched to members${matched.length ? ` (${esc(matched.join(', '))})` : ''}. The rest are kept as names on the items.`;
+    $('impGo').disabled = false;
+    return boards;
+  } catch (err) { $('impPreview').textContent = ''; $('impErr').textContent = err.message.startsWith('This') ? err.message : 'Could not read that. Paste the whole export.'; return null; }
+}
+async function runImport(boards) {
+  const year = new Date().getFullYear();
+  const done = new Set(cards.map(c => c.importKey).filter(Boolean));
+  const writes = [];
+  for (const b of boards) {
+    let team = teams.find(t => norm(t.name) === norm(b.name));
+    if (!team) { const ref = await addDoc(orgCol('teams'), { name: b.name, subsystems: [], createdAt: Date.now() }); team = { id: ref.id, name: b.name, subsystems: [] }; }
+    const subs = [...(team.subsystems || [])];
+    for (const gname of [...new Set([...(b.groups || []), ...b.rows.map(r => r[0])])].filter(Boolean)) {
+      if (!subs.some(s => norm(s.name) === norm(gname))) subs.push({ id: Math.random().toString(36).slice(2, 10), name: gname });
+    }
+    if (subs.length !== (team.subsystems || []).length) await updateDoc(orgRef('teams', team.id), { subsystems: subs });
+    const subId = g => subs.find(s => norm(s.name) === norm(g))?.id || null;
+    const parents = {};   // group|title -> card id
+    b.rows.forEach((r, i) => {
+      const [group, parentTitle, title, status, date, people, prio] = r;
+      const key = importKey(b.name, r);
+      const id = doc(orgCol('cards')).id;
+      if (!parentTitle) parents[norm(group + '|' + title)] = { id, key };
+      if (done.has(key)) { const ex = cards.find(c => c.importKey === key); if (ex && !parentTitle) parents[norm(group + '|' + title)] = { id: ex.id, key }; return; }
+      const parentId = parentTitle ? parents[norm(group + '|' + parentTitle)]?.id || null : null;
+      const assignees = [], assigneeNames = [];
+      (people || []).forEach(p => { const m = matchMember(p); m ? assignees.push(m.uid) : assigneeNames.push(p); });
+      writes.push([id, {
+        title: String(title).slice(0, 200), desc: '', status: PLAKY_STATUS[norm(status)] || 'todo', priority: PLAKY_PRIO[norm(prio)] || null,
+        due: date ? plakyDate(date, year) : null, teamId: team.id, subsystemId: subId(group), parentId,
+        assignees: [...new Set(assignees)], assigneeNames: [...new Set(assigneeNames)], order: (i + 1) * 1024,
+        createdBy: user.uid, createdByName: myMember.name, createdAt: Date.now(), updatedAt: Date.now(), importedFrom: 'plaky', importKey: key
+      }]);
+    });
+  }
+  let n = 0;
+  for (let i = 0; i < writes.length; i += 20) {
+    await Promise.all(writes.slice(i, i + 20).map(([id, data]) => setDoc(orgRef('cards', id), data)));
+    n += Math.min(20, writes.length - i);
+    $('impPreview').textContent = `Imported ${n} of ${writes.length}…`;
+  }
+  return writes.length;
+}
+$('bImport').onclick = () => { $('impText').value = ''; $('impPreview').textContent = ''; $('impErr').textContent = ''; $('impGo').disabled = true; $('impDlg').showModal(); };
+$('impText').addEventListener('input', previewImport);
+$('impCancel').onclick = () => $('impDlg').close();
+$('impForm').onsubmit = async e => {
+  e.preventDefault();
+  const boards = previewImport(); if (!boards) return;
+  $('impGo').disabled = true; $('impText').disabled = true;
+  try { const n = await runImport(boards); $('impPreview').textContent = `Done. ${n} item(s) imported.`; }
+  catch (err) { console.error(err); $('impErr').textContent = niceError(err); }
+  $('impText').disabled = false;
 };
 
 // ---------- Tabs ----------
-function setTab(t) { tab = t; render(); }
-$('tabs').onclick = e => { const b = e.target.closest('[data-tab]'); if (b) setTab(b.dataset.tab); };
+const TITLES = { clock: 'Clock', mytasks: 'My tasks', sheet: 'Timesheets', people: 'People', teams: 'Teams', map: 'Map', board: 'Board', settings: 'Settings' };
+function setTab(t, board) {
+  tab = t;
+  if (board) { boardTeam = board; try { localStorage.setItem('zb-board', board); } catch (e) {} }
+  document.body.classList.remove('side-open');
+  render();
+  window.scrollTo(0, 0);
+}
+$('tabs').onclick = e => { const b = e.target.closest('[data-tab]'); if (b) setTab(b.dataset.tab, b.dataset.board); };
+$('menuBtn').onclick = () => document.body.classList.toggle('side-open');
+$('scrim').onclick = () => document.body.classList.remove('side-open');
 
 // Live timers
 setInterval(renderClock, 1000);

@@ -8,66 +8,207 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
   :root {
-    --bg: #f5f6fa; --card: #ffffff; --text: #1d2233; --muted: #6b7288;
-    --line: #e4e7ef; --accent: #3b5bdb; --in: #2f9e44; --out: #e03131; --brk: #f08c00;
+    --bg: #f4f5f9; --card: #ffffff; --text: #1f2233; --muted: #6b7288;
+    --line: #e2e5ee; --accent: #3d7cf5; --in: #2e8540; --out: #d83a3a; --brk: #c99700;
+    --side: #ffffff; --hover: rgba(40, 50, 90, .06); --row: #ffffff; --row-h: #f0f2f7; --pop: #ffffff;
+    --st-done: #2e8540; --st-doing: #c99700; --st-todo: #d83a3a; --st-backlog: #6a7c88;
+    --pr-high: #d83a3a; --pr-medium: #c99700; --pr-low: #2e8540;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #12141c; --card: #1b1e29; --text: #e8eaf2; --muted: #9aa0b4;
-      --line: #2b2f3d; --accent: #748ffc; --in: #51cf66; --out: #ff6b6b; --brk: #ffa94d;
+      --bg: #242433; --card: #2c2c3e; --text: #ececf4; --muted: #a3a3bb;
+      --line: #3d3d53; --accent: #4f8dff; --in: #43a047; --out: #e53935; --brk: #d4a015;
+      --side: #1c1c29; --hover: rgba(255, 255, 255, .06); --row: #34344a; --row-h: #2e2e42; --pop: #33334a;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); padding-bottom: env(safe-area-inset-bottom); }
   [hidden] { display: none !important; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; padding-top: calc(14px + env(safe-area-inset-top)); background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 1000; }
-  header h1 { margin: 0; font-size: 20px; white-space: nowrap; }
-  header h1 { display: flex; align-items: center; }
-  header h1 .brand-default > span { color: var(--accent); }
+  html, body { overflow-x: hidden; }
+
+  /* App shell: Plaky-style sidebar + top bar */
+  .shell { display: flex; min-height: 100vh; }
+  #side { width: 244px; flex: none; background: var(--side); border-right: 1px solid var(--line); position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px calc(14px + env(safe-area-inset-bottom)); z-index: 1001; }
+  body.noside #side, body.noside #scrim { display: none; }
+  .side-brand { display: flex; align-items: center; gap: 8px; padding: calc(4px + env(safe-area-inset-top)) 8px 6px; font-size: 19px; font-weight: 800; }
+  .side-brand .brand-default > span { color: var(--accent); }
+  .side-org { padding: 2px 4px 12px; }
+  .side-org select { width: 100%; font-weight: 600; font-size: 14px; padding: 8px 10px; }
+  .side-foot button { width: 100%; }
+  .me-av { border: 0; margin: 0; }
+  .nav-item { display: flex; align-items: center; gap: 11px; width: 100%; background: transparent; color: var(--text); padding: 8px 10px; border-radius: 8px; font-weight: 500; font-size: 14px; text-align: left; min-width: 0; }
+  .nav-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-item svg { width: 18px; height: 18px; flex: none; opacity: .75; }
+  .nav-item:hover { background: var(--hover); }
+  .nav-item.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  .nav-item.active svg { opacity: 1; }
+  .side-sec { margin: 16px 10px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+  .side-foot { margin-top: auto; padding: 12px 8px 0; border-top: 1px solid var(--line); display: grid; gap: 8px; font-size: 13px; color: var(--muted); }
+  .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 1000; display: flex; align-items: center; gap: 12px; padding: 12px 22px; padding-top: calc(12px + env(safe-area-inset-top)); background: var(--bg); border-bottom: 1px solid var(--line); }
+  .topbar h1 { margin: 0; font-size: 20px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
+  .topbar .top-brand { display: none; }
+  body.noside .topbar .top-brand { display: flex; align-items: center; }
+  body.noside .topbar .top-brand .brand-default > span { color: var(--accent); }
+  body.noside #pageTitle { display: none; }
+  .icon-btn { background: transparent; color: var(--text); padding: 6px; border-radius: 8px; display: inline-grid; place-items: center; }
+  .icon-btn:hover { background: var(--hover); }
+  .icon-btn svg { width: 22px; height: 22px; }
+  #menuBtn { display: none; }
+  #scrim { display: none; }
   .who { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); min-width: 0; }
   .who b { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  nav { display: flex; gap: 4px; padding: 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); overflow-x: auto; }
-  nav button { background: transparent; color: var(--muted); font-weight: 500; padding: 8px 14px; }
-  nav button.active { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
-  main { max-width: 1000px; margin: 0 auto; padding: 20px 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .me-av { width: 30px; height: 30px; font-size: 12px; }
+  main { width: 100%; max-width: 1040px; margin: 0 auto; padding: 22px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
   main > section, .card, .grid2 > * { min-width: 0; }
-  html, body { overflow-x: hidden; }
-  body.wide main { max-width: 1500px; }
-  /* Board */
-  .board-bar .row > input { flex: 1 1 160px; }
+  body.wide main { max-width: none; }
+  @media (max-width: 900px) {
+    #side { position: fixed; left: 0; top: 0; bottom: 0; height: auto; transform: translateX(-105%); transition: transform .22s ease; box-shadow: 0 0 40px rgba(0, 0, 0, .35); width: min(280px, 84vw); }
+    body.side-open #side { transform: none; }
+    body.side-open #scrim { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 1000; }
+    #menuBtn { display: inline-grid; }
+    .topbar { padding-left: 10px; padding-right: 12px; }
+    body.noside #menuBtn { display: none; }
+  }
+
+  /* Boards: main table */
   .chk { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-  .board { display: flex; gap: 12px; overflow-x: auto; align-items: flex-start; padding-bottom: 10px; scroll-snap-type: x proximity; min-height: 200px; }
-  .klist { flex: 0 0 290px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; max-height: calc(100vh - 230px); scroll-snap-align: start; }
-  .klist-head { display: flex; align-items: center; gap: 6px; padding: 2px 2px 8px; }
-  .klist-head b { flex: 1; overflow-wrap: anywhere; }
-  .klist-head .n { color: var(--muted); font-size: 13px; }
-  .klist.admin .klist-head { cursor: grab; }
-  .klist-cards { display: flex; flex-direction: column; gap: 8px; min-height: 14px; overflow-y: auto; padding: 2px; }
-  .kcard { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; cursor: pointer; display: grid; gap: 6px; user-select: none; }
-  .kcard:hover { border-color: var(--accent); }
-  .kcard-tags { font-size: 11px; color: var(--accent); font-weight: 700; }
+  .views { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .views button { background: transparent; color: var(--muted); padding: 9px 14px; border-radius: 8px 8px 0 0; font-weight: 600; font-size: 14px; border-bottom: 2px solid transparent; display: inline-flex; gap: 7px; align-items: center; white-space: nowrap; }
+  .views button svg { width: 16px; height: 16px; }
+  .views button.active { color: var(--text); border-bottom-color: var(--accent); }
+  .btools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0 16px; }
+  .btools .search { position: relative; flex: 0 1 240px; min-width: 150px; }
+  .btools .search input { width: 100%; padding: 8px 12px 8px 32px; }
+  .btools .search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--muted); }
+  .btools .spacer { flex: 1; }
+  .b-new { display: inline-flex; gap: 6px; align-items: center; padding: 8px 14px; }
+  .tscroll { overflow-x: auto; padding-bottom: 8px; }
+  .tgrid { min-width: 780px; --cols: minmax(260px, 1fr) 140px 120px 130px 130px; }
+  .grp { margin-bottom: 26px; }
+  .grp-head { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; position: sticky; left: 0; width: max-content; max-width: 100%; }
+  .grp-head b { color: var(--g); font-size: 16px; }
+  .grp-head .n { color: var(--muted); font-size: 13px; }
+  .grp-head .chev { background: var(--g); color: #fff; width: 22px; height: 22px; border-radius: 6px; display: inline-grid; place-items: center; cursor: pointer; transition: transform .15s; font-size: 12px; }
+  .grp.collapsed .chev { transform: rotate(-90deg); }
+  .trow { display: grid; grid-template-columns: var(--cols); min-height: 38px; background: var(--row); border-left: 4px solid var(--g); margin-bottom: 2px; border-radius: 4px; }
+  .trow.head { background: var(--row-h); min-height: 34px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+  .trow.head .tcell { justify-content: center; }
+  .trow.head .tcell.title { justify-content: flex-start; color: var(--g); font-weight: 700; font-size: 13.5px; }
+  .tcell { display: flex; align-items: center; justify-content: center; padding: 4px 7px; border-right: 1px solid var(--line); min-width: 0; font-size: 13.5px; }
+  .tcell:last-child { border-right: 0; }
+  .tcell.title { justify-content: flex-start; gap: 7px; position: sticky; left: 0; z-index: 1; background: inherit; border-radius: 4px 0 0 4px; }
+  .trow:hover { filter: brightness(1.04); }
+  .ttl { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .ttl:hover { color: var(--accent); }
+  .grip { color: var(--muted); cursor: grab; font-size: 12px; letter-spacing: -3px; padding: 0 4px 0 0; user-select: none; touch-action: none; }
+  .subtog { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+  .subtog:hover, .subtog.open { background: var(--hover); color: var(--text); }
+  .subtog svg { width: 14px; height: 14px; }
+  .subtog.none { opacity: .3; } .trow:hover .subtog.none, .subtog.none.open { opacity: 1; }
+  .hasdesc { color: var(--muted); font-size: 13px; flex: none; }
+  .subs { margin-left: 26px; padding-left: 0; }
+  .subs .trow { border-left-color: color-mix(in srgb, var(--g) 55%, transparent); background: color-mix(in srgb, var(--row) 88%, var(--bg)); }
+  .subs .trow.head { background: transparent; min-height: 28px; }
+  .pill { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 28px; padding: 0 8px; border-radius: 4px; color: #fff; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
+  .pill.sm { display: inline-flex; width: auto; min-height: 22px; font-size: 11.5px; padding: 0 8px; }
+  .pill.empty { background: transparent; color: transparent; }
+  .trow:hover .pill.empty, #pop .pill.empty { color: var(--muted); border: 1px dashed var(--line); }
+  .st-done { background: var(--st-done); } .st-doing { background: var(--st-doing); } .st-todo { background: var(--st-todo); } .st-backlog { background: var(--st-backlog); }
+  .pr-high { background: var(--pr-high); } .pr-medium { background: var(--pr-medium); } .pr-low { background: var(--pr-low); }
+  .tcell.date { position: relative; color: var(--text); font-size: 13px; cursor: pointer; }
+  .tcell.date input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; padding: 0; border: 0; }
+  .tcell.date.overdue span { color: var(--out); font-weight: 700; }
+  .tcell.date.soon span { color: var(--brk); font-weight: 700; }
+  .tcell.date.done span { color: var(--muted); font-weight: 400; text-decoration: line-through; }
+  .tcell.ppl { cursor: pointer; }
+  .avs { display: flex; align-items: center; }
+  .av { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10.5px; font-weight: 700; color: #fff; background: hsl(var(--h, 220) 55% 45%); border: 2px solid var(--row); margin-left: -6px; flex: none; }
+  .avs .av:first-child { margin-left: 0; }
+  .av.ext { background: transparent; color: var(--text); border: 1.5px dashed hsl(var(--h, 220) 55% 55%); }
+  .av.more { background: var(--line); color: var(--text); }
+  .pp-empty { color: var(--muted); opacity: 0; font-size: 18px; }
+  .trow:hover .pp-empty { opacity: 1; }
+  .addrow { display: grid; grid-template-columns: var(--cols); background: transparent; border-left: 4px solid color-mix(in srgb, var(--g) 45%, transparent); border-radius: 4px; }
+  .addrow input { grid-column: 1 / -1; background: transparent; border: 1px dashed transparent; border-radius: 4px; padding: 8px 10px; font-size: 13.5px; color: var(--text); width: 100%; }
+  .addrow input:hover, .addrow input:focus { border-color: var(--line); background: var(--row); outline: none; }
+  .sumrow { display: grid; grid-template-columns: var(--cols); margin-top: 4px; min-height: 34px; }
+  .sumrow > div { display: flex; align-items: center; justify-content: center; padding: 3px 7px; font-size: 12.5px; color: var(--muted); }
+  .sumrow > div:not(:first-child) { background: var(--row-h); border-right: 1px solid var(--line); }
+  .sumrow > div:nth-child(2) { border-radius: 6px 0 0 6px; } .sumrow > div:last-child { border-radius: 0 6px 6px 0; border-right: 0; }
+  .bar { display: flex; height: 22px; width: 100%; border-radius: 4px; overflow: hidden; background: var(--line); }
+  .bar span { height: 100%; }
+  .range { background: var(--accent); color: #fff; border-radius: 99px; padding: 3px 10px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .add-group { background: transparent; color: var(--muted); border: 1px dashed var(--line); display: inline-flex; gap: 6px; align-items: center; padding: 8px 14px; font-weight: 500; }
+  .add-group:hover { color: var(--text); border-color: var(--muted); }
+  .sortable-ghost { opacity: .35; }
+  .sortable-drag, .sortable-fallback { opacity: .95 !important; }
+
+  /* Boards: Kanban */
+  .kan { display: flex; gap: 14px; overflow-x: auto; align-items: flex-start; padding-bottom: 12px; scroll-snap-type: x proximity; min-height: 200px; }
+  .kcol { flex: 1 0 260px; max-width: 380px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; max-height: calc(100vh - 240px); scroll-snap-align: start; overflow: hidden; }
+  .kcol-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; color: #fff; font-weight: 700; font-size: 14px; }
+  .kcol-head .n { margin-left: auto; font-weight: 600; opacity: .85; font-size: 13px; }
+  .kcol-cards { display: flex; flex-direction: column; gap: 8px; min-height: 30px; overflow-y: auto; padding: 10px; }
+  .kcard { background: var(--row); border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px; cursor: pointer; display: grid; gap: 8px; user-select: none; border-left: 4px solid var(--g, var(--line)); }
+  .kcard:hover { border-color: var(--accent); border-left-color: var(--g, var(--accent)); }
+  .kcard-tag { font-size: 11px; color: var(--g); font-weight: 700; }
   .kcard-title { font-size: 14px; overflow-wrap: anywhere; color: var(--text); }
   .kcard-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .kcard-meta .avs { margin-left: auto; }
   .kdue.overdue { color: var(--out); font-weight: 700; } .kdue.soon { color: var(--brk); font-weight: 700; }
-  .kavs { display: flex; margin-left: auto; }
-  .kav { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; background: var(--accent); border: 2px solid var(--bg); margin-left: -6px; }
-  .kadd input { width: 100%; margin-top: 8px; background: transparent; border-style: dashed; }
-  .sortable-ghost { opacity: .35; }
-  .sortable-drag, .sortable-fallback { transform: rotate(2deg); opacity: .95 !important; }
+  .kadd input { width: calc(100% - 20px); margin: 0 10px 10px; background: transparent; border-style: dashed; }
+  @media (max-width: 640px) { .kcol { flex-basis: 84vw; max-height: none; } main { padding: 14px 12px; } .tgrid { min-width: 640px; --cols: minmax(190px, 1fr) 112px 88px 96px 100px; } .tcell { font-size: 13px; } }
+
+  /* Popover (status, priority, people pickers) */
+  #pop { position: fixed; z-index: 3000; background: var(--pop); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 40px rgba(0, 0, 0, .3); padding: 8px; display: grid; gap: 5px; width: 200px; max-height: min(420px, 70vh); overflow-y: auto; }
+  #pop.wide { width: 260px; }
+  #pop .pill { min-height: 32px; }
+  #pop .opt { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  #pop .opt:hover { background: var(--hover); }
+  #pop .opt input { margin: 0; }
+  #pop .opt .av { border-color: var(--pop); }
+  #pop input.popq { width: 100%; padding: 7px 10px; font-size: 13px; }
+  #pop .ptitle { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 6px 8px 2px; }
+
+  /* Item drawer */
+  dialog#cardDlg { margin: 0 0 0 auto; height: 100%; max-height: 100%; width: min(600px, 100vw); border: 0; border-left: 1px solid var(--line); border-radius: 0; background: var(--bg); color: var(--text); padding: 0; }
+  dialog#cardDlg[open] { animation: slidein .2s ease; }
+  @keyframes slidein { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  #cardForm { padding: 18px 22px calc(22px + env(safe-area-inset-bottom)); padding-top: calc(18px + env(safe-area-inset-top)); display: grid; gap: 14px; }
+  .dhead { display: flex; align-items: center; gap: 10px; }
+  .crumb { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .crumb a { color: var(--accent); cursor: pointer; }
+  #cTitle { font-size: 21px; font-weight: 700; border-color: transparent; background: transparent; padding: 6px 8px; margin: 0 -8px; }
+  #cTitle:hover, #cTitle:focus { border-color: var(--line); background: var(--card); }
+  .fields { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px 12px; align-items: center; font-size: 14px; }
+  .fields > span { color: var(--muted); font-size: 13px; }
+  .fields select, .fields input { width: 100%; }
+  dialog::backdrop { background: rgba(0, 0, 0, .5); }
+  dialog textarea { font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); resize: vertical; width: 100%; }
+  .dsec { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-top: 4px; }
+  .sublist { display: grid; gap: 4px; }
+  .subline { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 8px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px 5px 5px; font-size: 14px; }
+  .subline .ttl { white-space: normal; }
+  .subline .pill { min-height: 26px; font-size: 12px; }
+  #cAddSub input { width: 100%; border-style: dashed; background: transparent; }
+  dialog#impDlg { border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--text); width: min(620px, calc(100vw - 24px)); padding: 20px; }
+  #impText { font: 12px ui-monospace, Menlo, monospace; }
+  .pick { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pick label { border: 1px solid var(--line); border-radius: 99px; padding: 4px 10px 4px 4px; font-size: 13px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .pick label .av { width: 22px; height: 22px; font-size: 9px; border: 0; margin: 0; }
+  .pick label input { display: none; }
+  .pick label:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .tiny { background: transparent; color: var(--muted); padding: 2px 6px; font-size: 12px; font-weight: 500; }
   .tiny:hover { color: var(--text); }
-  dialog#cardDlg { border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--text); width: min(560px, calc(100vw - 24px)); padding: 18px; }
-  dialog::backdrop { background: rgba(0, 0, 0, .55); }
-  #cardDlg textarea { font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); resize: vertical; }
-  #cTitle { font-size: 17px; font-weight: 600; }
+
+  /* My tasks */
+  .mt .tgrid { --cols: minmax(240px, 1fr) 170px 140px 120px 130px; }
+  .mt .board-name { font-size: 12.5px; color: var(--muted); justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
   .grid-2 label { display: grid; gap: 4px; font-size: 13px; }
-  .pick { display: flex; flex-wrap: wrap; gap: 6px; }
-  .pick label { border: 1px solid var(--line); border-radius: 99px; padding: 5px 10px; font-size: 13px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
-  .pick label:has(input:checked) { border-color: var(--accent); color: var(--accent); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .chip { border: 1px solid var(--line); border-radius: 99px; padding: 3px 4px 3px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
-  @media (max-width: 640px) { .klist { flex-basis: 84vw; max-height: none; } .board-bar .row > * { flex: 1 1 45%; } }
   /* Phones: tables become stacked cards, filters go full width */
   @media (max-width: 640px) {
     main { padding: 14px 12px; }
@@ -162,7 +303,7 @@
   td select { padding: 5px 8px; font-size: 13px; }
   .ok { color: var(--in); font-size: 14px; min-height: 1em; }
   .orgline { color: var(--muted); font-size: 14px; }
-  @media (max-width: 560px) { #meName { display: none; } header h1 { font-size: 17px; } .who select { max-width: 140px; } }
+  @media (max-width: 560px) { #meName { display: none; } .topbar h1 { font-size: 17px; } .who select { max-width: 130px; } }
 </style>
 <link rel="stylesheet" href="brands/cefast/theme.css">
 <script>
@@ -200,24 +341,34 @@
 </section>
 
 <!-- App -->
-<div id="appView" hidden>
-  <header>
-    <h1><img class="brand-logo" src="brands/cefast/logo-white.svg" alt="CEFAST Aerospace"><span class="brand-default">⏱ <span>Zurmel</span>ibble</span></h1>
-    <div class="who">
+<div id="appView" class="shell" hidden>
+  <aside id="side">
+    <div class="side-brand"><img class="brand-logo" src="brands/cefast/logo-white.svg" alt="CEFAST Aerospace"><span class="brand-default">⏱ <span>Zurmel</span>ibble</span></div>
+    <div class="side-org" id="sideOrgBox"></div>
+    <nav id="tabs">
+      <button class="nav-item" data-tab="clock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Clock</span></button>
+      <button class="nav-item" data-tab="mytasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>My tasks</span></button>
+      <button class="nav-item" data-tab="sheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg><span>Timesheets</span></button>
+      <button class="nav-item" data-tab="people" data-need="staff" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg><span>People</span></button>
+      <button class="nav-item" data-tab="teams" data-need="admin" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg><span>Teams</span></button>
+      <button class="nav-item" data-tab="map" data-need="staff" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span>Map</span></button>
+      <button class="nav-item" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><span>Settings</span></button>
+      <div class="side-sec">Boards</div>
+      <div id="sideBoards"></div>
+    </nav>
+    <div class="side-foot" id="sideFoot"></div>
+  </aside>
+  <div id="scrim"></div>
+  <div class="main-col">
+  <div class="topbar">
+    <button class="icon-btn" id="menuBtn" type="button" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <h1><span class="top-brand"><img class="brand-logo" src="brands/cefast/logo-white.svg" alt="CEFAST Aerospace"><span class="brand-default">⏱ <span>Zurmel</span>ibble</span></span><span id="pageTitle"></span></h1>
+    <div class="who" id="whoBox">
       <select id="orgSwitch" title="Switch organisation" hidden></select>
-      <b id="meName"></b><span id="meRole" class="badge s-admin" hidden></span>
+      <span class="av me-av" id="meAv" hidden></span><b id="meName"></b><span id="meRole" class="badge s-admin" hidden></span>
       <button class="b-ghost b-sm" id="signOut">Sign out</button>
     </div>
-  </header>
-  <nav id="tabs" hidden>
-    <button data-tab="clock" class="active">Clock</button>
-    <button data-tab="sheet">Timesheets</button>
-    <button data-tab="people" data-need="staff" hidden>People</button>
-    <button data-tab="teams" data-need="admin" hidden>Teams</button>
-    <button data-tab="map" data-need="staff" hidden>Map</button>
-    <button data-tab="board">Board</button>
-    <button data-tab="settings">Settings</button>
-  </nav>
+  </div>
 
   <main>
     <!-- Loading -->
@@ -390,20 +541,32 @@
       </div>
     </section>
 
-    <!-- Settings tab -->
-    <!-- Board (Kanban) -->
+    <!-- Boards (Plaky-style: main table + Kanban) -->
     <section data-view="board" hidden>
-      <div class="card board-bar">
-        <div class="row">
-          <select id="bTeam" title="Team"></select>
-          <select id="bSub" title="Subsystem"></select>
-          <input id="bSearch" placeholder="Search cards" maxlength="60">
-          <label class="muted chk"><input type="checkbox" id="bMine"> Only my cards</label>
-          <button class="b-ghost" id="bAddList" type="button" data-need="admin" hidden>Add list</button>
-        </div>
+      <div class="views" id="bViews">
+        <button type="button" data-view-btn="table"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18"/></svg>Main table</button>
+        <button type="button" data-view-btn="kanban"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>Kanban</button>
       </div>
-      <div class="board" id="board"></div>
+      <div class="btools">
+        <button type="button" class="b-new" id="bNew"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New item</button>
+        <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="bSearch" placeholder="Search" maxlength="60"></div>
+        <label class="muted chk"><input type="checkbox" id="bMine"> Only mine</label>
+        <label class="muted chk"><input type="checkbox" id="bHideDone"> Hide done</label>
+        <span class="spacer"></span>
+        <button type="button" class="b-ghost b-sm" id="bImport" data-need="admin" hidden>Import from Plaky</button>
+      </div>
+      <div id="board"></div>
       <p class="muted" id="boardEmpty" hidden></p>
+    </section>
+
+    <!-- My tasks -->
+    <section data-view="mytasks" hidden>
+      <div class="btools">
+        <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="mtSearch" placeholder="Search my tasks" maxlength="60"></div>
+        <label class="muted chk"><input type="checkbox" id="mtDone"> Show done</label>
+      </div>
+      <div id="myTasks" class="mt"></div>
+      <p class="muted" id="myTasksEmpty" hidden>Nothing assigned to you. Tasks where you're in the People column show up here.</p>
     </section>
 
     <section data-view="settings" hidden>
@@ -452,33 +615,55 @@
       </div>
     </section>
   </main>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="vendor/Sortable.min.js"></script>
 <dialog id="cardDlg">
-  <form id="cardForm" class="stack" method="dialog">
-    <input id="cTitle" placeholder="Card title" required maxlength="200">
-    <textarea id="cDesc" rows="5" placeholder="Description" maxlength="5000"></textarea>
-    <div class="grid-2">
-      <label class="muted">List<select id="cList"></select></label>
-      <label class="muted">Due date<input type="date" id="cDue"></label>
-      <label class="muted">Team<select id="cTeam"></select></label>
-      <label class="muted">Subsystem<select id="cSub"></select></label>
+  <form id="cardForm" method="dialog">
+    <div class="dhead">
+      <div class="crumb" id="cCrumb"></div>
+      <button type="button" class="icon-btn" id="cCancel" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
-    <div class="muted">Assigned to</div>
-    <div class="pick" id="cPeople"></div>
+    <input id="cTitle" placeholder="Item name" required maxlength="200">
+    <div class="fields">
+      <span>Status</span><select id="cStatus"></select>
+      <span>Priority</span><select id="cPrio"></select>
+      <span>Due date</span><input type="date" id="cDue">
+      <span>Board</span><select id="cTeam"></select>
+      <span>Group</span><select id="cSub"></select>
+      <span>People</span><div class="pick" id="cPeople"></div>
+    </div>
+    <div class="dsec">Notes</div>
+    <textarea id="cDesc" rows="5" placeholder="Add details, links, decisions…" maxlength="5000"></textarea>
+    <div id="cSubsBox">
+      <div class="dsec" id="cSubsTitle">Subitems</div>
+      <div class="sublist" id="cSubs"></div>
+      <div id="cAddSub"><input placeholder="+ Add subitem, then press Enter" maxlength="200" enterkeyhint="done"></div>
+    </div>
     <div class="muted" id="cMeta"></div>
     <div class="row" style="justify-content:space-between">
-      <button type="button" class="b-ghost" id="cDelete">Delete card</button>
-      <div class="row">
-        <button type="button" class="b-ghost" id="cCancel">Cancel</button>
-        <button type="submit" id="cSave">Save</button>
-      </div>
+      <button type="button" class="b-ghost" id="cDelete">Delete</button>
+      <button type="submit" id="cSave">Save</button>
     </div>
     <div class="err" id="cErr"></div>
   </form>
 </dialog>
+<dialog id="impDlg">
+  <form id="impForm" class="stack" method="dialog">
+    <h2 style="margin:0">Import from Plaky</h2>
+    <p class="muted" style="margin:0">Paste the exported Plaky data. Boards become team boards, Plaky groups become groups, and people are matched to members by name. Items already imported are skipped.</p>
+    <textarea id="impText" rows="8" placeholder='{"source":"plaky","boards":[…]}'></textarea>
+    <div class="muted" id="impPreview"></div>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="b-ghost" id="impCancel">Close</button>
+      <button type="submit" id="impGo" disabled>Import</button>
+    </div>
+    <div class="err" id="impErr"></div>
+  </form>
+</dialog>
+<div id="pop" hidden></div>
 <script type="module" src="app.js"></script>
 </body>
 </html>
