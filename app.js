@@ -983,7 +983,13 @@ function dueInfo(due, done) {
   return { label, cls: done ? 'done' : days < 0 ? 'overdue' : days < 2 ? 'soon' : '' };
 }
 const childrenOf = id => cards.filter(c => c.parentId === id).sort((x, y) => (x.order ?? 0) - (y.order ?? 0));
-const isMine = c => (c.assignees || []).includes(user.uid);
+// Plaky names that belong to someone who has since joined count as that member.
+function linked(c) {
+  const uids = new Set(c.assignees || []), names = [];
+  (c.assigneeNames || []).forEach(n => { const m = matchMember(n); m ? uids.add(m.uid) : names.push(n); });
+  return { uids: [...uids], names };
+}
+const isMine = c => linked(c).uids.includes(user.uid);
 
 // Boards shown in the sidebar: every team, plus "General" for items without a team.
 function boardList() {
@@ -1014,7 +1020,7 @@ function matches(c) {
 }
 
 function peopleHtml(c) {
-  const ppl = [...(c.assignees || []).map(u => ({ n: personName(u) })), ...(c.assigneeNames || []).map(n => ({ n, ext: true }))];
+  const L = linked(c), ppl = [...L.uids.map(u => ({ n: personName(u) })), ...L.names.map(n => ({ n, ext: true }))];
   if (!ppl.length) return '<span class="pp-empty">+</span>';
   const av = p => `<span class="av${p.ext ? ' ext' : ''}" style="--h:${hue(p.n)}" title="${esc(p.n)}${p.ext ? ' (not in Zurmelibble yet)' : ''}">${esc(initials(p.n))}</span>`;
   return `<span class="avs">${ppl.slice(0, 3).map(av).join('')}${ppl.length > 3 ? `<span class="av more" title="${esc(ppl.slice(3).map(p => p.n).join(', '))}">+${ppl.length - 3}</span>` : ''}</span>`;
@@ -1221,9 +1227,9 @@ function openPop(kind, id, anchor) {
     if (kind === 'prio') html = PRIOS.map(p => `<span class="pill ${p.cls}" data-set="priority" data-val="${p.id}">${p.label}</span>`).join('') + '<span class="pill empty" data-set="priority" data-val="">Clear</span>';
     if (kind === 'people') {
       const opt = (val, n, on, ext) => `<label class="opt"><input type="checkbox" data-person="${esc(val)}" ${ext ? 'data-ext="1"' : ''} ${on ? 'checked' : ''}><span class="av${ext ? ' ext' : ''}" style="--h:${hue(n)}">${esc(initials(n))}</span><span>${esc(n)}</span></label>`;
-      const mine = directory.filter(m => (c.assignees || []).includes(m.uid)), rest = directory.filter(m => !(c.assignees || []).includes(m.uid));
+      const L = linked(c), mine = directory.filter(m => L.uids.includes(m.uid)), rest = directory.filter(m => !L.uids.includes(m.uid));
       html = '<input class="popq" placeholder="Search people">' +
-        mine.map(m => opt(m.uid, m.name, true)).join('') + (c.assigneeNames || []).map(n => opt(n, n, true, true)).join('') +
+        mine.map(m => opt(m.uid, m.name, true)).join('') + L.names.map(n => opt(n, n, true, true)).join('') +
         rest.map(m => opt(m.uid, m.name, false)).join('');
     }
   }
@@ -1264,7 +1270,8 @@ $('pop').addEventListener('change', e => {
   const c = cards.find(x => x.id === popFor.id); if (!c) return;
   const val = cb.dataset.person;
   if (cb.dataset.ext) patchCard(c.id, { assigneeNames: cb.checked ? [...new Set([...(c.assigneeNames || []), val])] : (c.assigneeNames || []).filter(n => n !== val) });
-  else patchCard(c.id, { assignees: cb.checked ? [...new Set([...(c.assignees || []), val])] : (c.assignees || []).filter(u => u !== val) });
+  else patchCard(c.id, cb.checked ? { assignees: [...new Set([...(c.assignees || []), val])] }
+    : { assignees: (c.assignees || []).filter(u => u !== val), assigneeNames: (c.assigneeNames || []).filter(n => matchMember(n)?.uid !== val) });
 });
 document.addEventListener('click', e => { if (!$('pop').hidden && !e.target.closest('#pop')) closePop(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('pop').hidden) closePop(); });
@@ -1281,7 +1288,8 @@ function fillCardSubs(teamId, sel) {
 }
 function peoplePickHtml(c) {
   const lab = (val, n, on, ext) => `<label><input type="checkbox" value="${esc(val)}" ${ext ? 'data-ext="1"' : ''} ${on ? 'checked' : ''}><span class="av${ext ? ' ext' : ''}" style="--h:${hue(n)}">${esc(initials(n))}</span>${esc(n)}</label>`;
-  return (c.assigneeNames || []).map(n => lab(n, n, true, true)).join('') + directory.map(m => lab(m.uid, m.name, (c.assignees || []).includes(m.uid))).join('') || '<span class="muted">Nobody yet.</span>';
+  const L = linked(c);
+  return L.names.map(n => lab(n, n, true, true)).join('') + directory.map(m => lab(m.uid, m.name, L.uids.includes(m.uid))).join('') || '<span class="muted">Nobody yet.</span>';
 }
 function syncDrawer() {
   const c = cards.find(x => x.id === editing); if (!c || !$('cardDlg').open) return;
