@@ -68,6 +68,9 @@
     body.side-open #side { transform: none; }
     body.side-open #scrim { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 1000; }
     #menuBtn { display: inline-grid; }
+    /* Phones: the top bar is pinned to the top of the screen while the page scrolls under it */
+    .topbar { position: fixed; top: 0; left: 0; right: 0; }
+    .main-col { padding-top: var(--topbar-h, calc(58px + env(safe-area-inset-top))); }
     .topbar { padding-left: 10px; padding-right: 12px; }
     body.noside #menuBtn { display: none; }
   }

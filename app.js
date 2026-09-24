@@ -1595,7 +1595,12 @@ function placeHomeLogo() {
   const x = slot.left + (endLeft - slot.left) * ex, y = slot.top + (endTop - slot.top) * ey, sc = 1 + (s1 - 1) * ex;
   el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${sc.toFixed(4)})`;
 }
-const queueLogo = () => { if (!logoRaf) logoRaf = requestAnimationFrame(placeHomeLogo); };
+// Phones pin the top bar with position: fixed, so the page needs room for its real height.
+function syncTopbarHeight() {
+  const h = document.querySelector('.topbar').offsetHeight;
+  if (h) document.documentElement.style.setProperty('--topbar-h', h + 'px');
+}
+const queueLogo = () => { if (!logoRaf) logoRaf = requestAnimationFrame(() => { syncTopbarHeight(); placeHomeLogo(); }); };
 addEventListener('scroll', queueLogo, { passive: true });
 addEventListener('resize', queueLogo);
 $('homeLogo').querySelector('img').addEventListener('load', queueLogo);
