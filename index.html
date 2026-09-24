@@ -202,6 +202,49 @@
   .tiny { background: transparent; color: var(--muted); padding: 2px 6px; font-size: 12px; font-weight: 500; }
   .tiny:hover { color: var(--text); }
 
+  /* Home */
+  .home-hero { display: grid; gap: 2px; margin-bottom: 4px; }
+  .home-hero h2 { margin: 0; font-size: 26px; }
+  .home-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .home-grid .span2 { grid-column: span 2; } .home-grid .span3 { grid-column: 1 / -1; }
+  .hcard { display: grid; gap: 12px; align-content: start; }
+  .hclock { justify-items: center; text-align: center; align-content: center; }
+  .hc-top { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .hclock .bigtime { font-size: 42px; }
+  .hhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .card .hhead h2 { margin: 0; }
+  .linkbtn { background: transparent; color: var(--accent); padding: 4px 6px; font-weight: 600; font-size: 13px; }
+  .hstats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .hstat { background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 12px; text-align: left; display: grid; gap: 4px; font-weight: 400; }
+  .hstat:hover { border-color: var(--accent); }
+  .hstat small { color: var(--muted); font-size: 12px; }
+  .hstat b { font-size: 22px; font-variant-numeric: tabular-nums; }
+  .hstat.alert b { color: var(--out); }
+  .hweek { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; height: 130px; }
+  .hday { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; height: 100%; gap: 3px; text-align: center; font-size: 11px; color: var(--muted); }
+  .hday .col { display: flex; align-items: flex-end; justify-content: center; min-height: 0; }
+  .hday .col span { width: min(34px, 80%); background: color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 5px 5px 2px 2px; min-height: 3px; }
+  .hday.today .col span { background: var(--accent); }
+  .hday.today { color: var(--text); font-weight: 700; }
+  .hlist { display: grid; gap: 6px; }
+  .hrow { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px; border-radius: 8px; background: var(--row); border: 1px solid var(--line); font-size: 14px; cursor: pointer; }
+  .hrow:hover { border-color: var(--accent); }
+  .hrow .pill { min-height: 26px; font-size: 12px; }
+  .hrow .t { min-width: 0; display: grid; }
+  .hrow .t b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hrow .t small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hrow .d { font-size: 12.5px; color: var(--muted); white-space: nowrap; padding-right: 4px; }
+  .hrow .d.overdue { color: var(--out); font-weight: 700; } .hrow .d.soon { color: var(--brk); font-weight: 700; }
+  .hrow.person { grid-template-columns: auto minmax(0, 1fr) auto; cursor: default; }
+  .hrow.person:hover { border-color: var(--line); }
+  .hboards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .hboard { background: var(--row); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 8px; cursor: pointer; text-align: left; color: var(--text); font-weight: 400; }
+  .hboard:hover { border-color: var(--accent); }
+  .hboard b { font-size: 15px; }
+  .hboard small { color: var(--muted); font-size: 12.5px; }
+  .hempty { color: var(--muted); font-size: 14px; padding: 6px 2px; }
+  @media (max-width: 900px) { .hrow { grid-template-columns: 86px minmax(0, 1fr) auto; } .home-hero h2 { font-size: 22px; } .home-grid { grid-template-columns: minmax(0, 1fr); } .home-grid .span2, .home-grid .span3 { grid-column: auto; } .hstats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
   /* My tasks */
   .mt .tgrid { --cols: minmax(240px, 1fr) 170px 140px 120px 130px; }
   .mt .board-name { font-size: 12.5px; color: var(--muted); justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -346,6 +389,7 @@
     <div class="side-brand"><img class="brand-logo" src="brands/cefast/logo-white.svg" alt="CEFAST Aerospace"><span class="brand-default">⏱ <span>Zurmel</span>ibble</span></div>
     <div class="side-org" id="sideOrgBox"></div>
     <nav id="tabs">
+      <button class="nav-item" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h5v-6h4v6h5V9.5"/></svg><span>Home</span></button>
       <button class="nav-item" data-tab="clock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Clock</span></button>
       <button class="nav-item" data-tab="mytasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>My tasks</span></button>
       <button class="nav-item" data-tab="sheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg><span>Timesheets</span></button>
@@ -440,6 +484,48 @@
           </table>
         </div>
         <p class="muted" id="pfEmpty">No organisations waiting for approval.</p>
+      </div>
+    </section>
+
+    <!-- Home -->
+    <section data-view="home" hidden>
+      <div class="home-hero">
+        <h2 id="homeHello">Hello</h2>
+        <div class="muted" id="homeDate"></div>
+      </div>
+      <div class="home-grid">
+        <div class="card hcard hclock">
+          <div class="hc-top"><span id="homeStatus" class="badge s-out">Clocked out</span><span class="muted" id="homeTeam"></span></div>
+          <div class="bigtime" id="homeToday">0:00:00</div>
+          <div class="muted">worked today</div>
+          <div class="clock-actions" id="homeActions"></div>
+          <div class="muted" id="homeNote"></div>
+        </div>
+        <div class="card hcard span2">
+          <div class="hstats">
+            <button type="button" class="hstat" data-go="mytasks"><small>My open tasks</small><b id="hsOpen">0</b></button>
+            <button type="button" class="hstat" data-go="mytasks" id="hsOverBox"><small>Overdue</small><b id="hsOver">0</b></button>
+            <button type="button" class="hstat" data-go="mytasks"><small>Due in 7 days</small><b id="hsWeek">0</b></button>
+            <button type="button" class="hstat" data-go="sheet"><small>Hours this week</small><b id="hsHours">0h 00m</b></button>
+          </div>
+          <div class="hweek" id="homeWeek"></div>
+        </div>
+        <div class="card hcard span2">
+          <div class="hhead"><h2>My tasks</h2><button type="button" class="linkbtn" data-go="mytasks">See all</button></div>
+          <div class="hlist" id="homeTasks"></div>
+        </div>
+        <div class="card hcard">
+          <div class="hhead"><h2 id="homeTeamTitle">Working now</h2><button type="button" class="linkbtn" data-go="people" data-need="staff" hidden>People</button></div>
+          <div class="hlist" id="homeWorking"></div>
+        </div>
+        <div class="card hcard span3">
+          <div class="hhead"><h2>Boards</h2></div>
+          <div class="hboards" id="homeBoards"></div>
+        </div>
+        <div class="card hcard span3">
+          <div class="hhead"><h2>Recently updated</h2></div>
+          <div class="hlist" id="homeRecent"></div>
+        </div>
       </div>
     </section>
 

@@ -38,7 +38,7 @@ let teams = [];           // teams in the org
 let shifts = [];          // shifts visible to me
 let userUnsubs = [], orgUnsubs = [], dataUnsubs = [];
 let dataKey = '';
-let tab = 'clock';
+let tab = 'home';
 let directory = [], lists = [], cards = [];
 let boardTeam = '', boardMine = false, boardSearch = '', dragging = false, boardSortables = [];
 try { boardTeam = localStorage.getItem('zb-board') || ''; } catch (e) {}
@@ -395,7 +395,7 @@ $('joinOrgForm').onsubmit = async e => {
     b.set(doc(db, 'users', user.uid, 'memberships', id), { name: orgName, joinedAt: Date.now() });
     b.update(doc(db, 'users', user.uid), { currentOrg: id });
     await b.commit();
-    $('joinCode').value = ''; onboarding = false; tab = 'clock';
+    $('joinCode').value = ''; onboarding = false; tab = 'home';
     if (location.search.includes('join=')) history.replaceState(null, '', location.pathname);
   } catch (err) { $('joinOrgErr').textContent = niceError(err); }
   btn.disabled = false;
@@ -456,7 +456,7 @@ async function act(kind) {
       await updateDoc(orgRef('shifts', open.id), { breaks });
     }
   } catch (e) { $('geoNote').textContent = niceError(e); }
-  busy = false; renderClock();
+  busy = false; renderClock(); renderHomeClock();
 }
 $('myActions').onclick = e => { const b = e.target.closest('[data-act]'); if (b) act(b.dataset.act); };
 
@@ -790,18 +790,18 @@ function render() {
     setScreen('review'); return;
   }
   document.querySelectorAll('[data-need]').forEach(el => show(el, el.dataset.need === 'super' ? isSuper() : el.dataset.need === 'admin' ? isAdmin() : isStaff()));
-  const allowed = ['clock', 'mytasks', 'sheet', 'board', 'settings'].concat(isStaff() ? ['people', 'map'] : [], isAdmin() ? ['teams'] : []);
-  if (!allowed.includes(tab)) tab = 'clock';
+  const allowed = ['home', 'clock', 'mytasks', 'sheet', 'board', 'settings'].concat(isStaff() ? ['people', 'map'] : [], isAdmin() ? ['teams'] : []);
+  if (!allowed.includes(tab)) tab = 'home';
   if (tab === 'board') currentBoard();
   document.querySelectorAll('#tabs > [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   renderSideBoards();
   $('meAv').textContent = initials(profile.name || user.email); $('meAv').style.setProperty('--h', hue(profile.name || '')); $('meAv').title = profile.name || '';
   $('pageTitle').textContent = tab === 'board' ? currentBoard().name : TITLES[tab];
   document.title = `${tab === 'board' ? currentBoard().name : TITLES[tab]} · ${org?.name || 'Zurmelibble'}`;
-  document.body.classList.toggle('wide', tab === 'board' || tab === 'mytasks');
+  document.body.classList.toggle('wide', tab === 'board' || tab === 'mytasks' || tab === 'home');
   setScreen('app');
   startWatch();
-  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap(); renderBoard(); renderMyTasks();
+  renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap(); renderBoard(); renderMyTasks(); renderHome();
   syncDrawer();
 }
 
@@ -1499,8 +1499,91 @@ $('impForm').onsubmit = async e => {
   $('impText').disabled = false;
 };
 
+// ---------- Home ----------
+const ago = ts => { const m = Math.round((Date.now() - ts) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
+function whereOf(c) {
+  const p = c.parentId ? cards.find(x => x.id === c.parentId) : null;
+  return [c.teamId ? teamName(c.teamId) : 'General', c.subsystemId ? subName(c.teamId, c.subsystemId) : '', p?.title].filter(Boolean).join(' › ');
+}
+function taskRow(c, right) {
+  const st = statusInfo(c);
+  return `<div class="hrow" data-open="${c.id}"><span class="pill ${st.cls}" data-pop="status" data-id="${c.id}">${st.label}</span>
+    <span class="t"><b>${esc(c.title)}</b><small>${esc(whereOf(c))}</small></span>${right}</div>`;
+}
+// Clock card on Home mirrors the Clock tab (updated every second by renderClock).
+function renderHomeClock() {
+  if (tab !== 'home' || !myMember || !isActive()) return;
+  const st = statusOf(user.uid);
+  $('homeStatus').className = 'badge s-' + st; $('homeStatus').textContent = STATUS[st];
+  $('homeTeam').textContent = myMember.teamId ? teamName(myMember.teamId) : '';
+  $('homeToday').textContent = fmtClock(todayMs(user.uid));
+  const box = $('homeActions');
+  if (box.dataset.state !== st + busy) { box.dataset.state = st + busy; box.innerHTML = $('myActions').innerHTML; }
+  $('homeNote').textContent = $('geoNote').textContent || $('geoStatus').textContent;
+  $('homeNote').className = $('geoNote').textContent ? 'muted' : $('geoStatus').className;
+}
+function renderHome() {
+  if (tab !== 'home' || !isActive()) return;
+  const h = new Date().getHours(), first = (profile?.name || myMember.name || '').split(' ')[0];
+  $('homeHello').textContent = `${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? ', ' + first : ''}`;
+  $('homeDate').textContent = `${new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })} · ${org?.name || ''}`;
+  renderHomeClock();
+  // Task stats
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = d => Math.round((new Date(d + 'T00:00') - today) / 864e5);
+  const open = cards.filter(c => isMine(c) && cardStatus(c) !== 'done');
+  const over = open.filter(c => c.due && day(c.due) < 0), week = open.filter(c => c.due && day(c.due) >= 0 && day(c.due) <= 7);
+  $('hsOpen').textContent = open.length; $('hsOver').textContent = over.length; $('hsWeek').textContent = week.length;
+  $('hsOverBox').classList.toggle('alert', over.length > 0);
+  // Hours this week (Mon to Sun)
+  const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(monday); d.setDate(monday.getDate() + i); return d; });
+  const perDay = days.map(d => shifts.filter(s => s.uid === user.uid && sameDay(s.start, d)).reduce((t, s) => t + workedMs(s), 0));
+  $('hsHours').textContent = fmtDur(perDay.reduce((a, b) => a + b, 0));
+  const max = Math.max(4 * 3600e3, ...perDay);
+  $('homeWeek').innerHTML = days.map((d, i) => `<div class="hday${d.toDateString() === new Date().toDateString() ? ' today' : ''}" title="${fmtDur(perDay[i])}">
+    <div class="col"><span style="height:${Math.max(2, perDay[i] / max * 100)}%"></span></div>
+    <div>${perDay[i] ? (perDay[i] / 3600e3).toFixed(1) + 'h' : ''}</div><div>${d.toLocaleDateString([], { weekday: 'short' })}</div></div>`).join('');
+  // My tasks: overdue first, then by due date
+  const list = [...open].sort((x, y) => (x.due || '9999').localeCompare(y.due || '9999') || (x.order ?? 0) - (y.order ?? 0)).slice(0, 7);
+  $('homeTasks').innerHTML = list.map(c => { const d = dueInfo(c.due, false); return taskRow(c, `<span class="d ${d?.cls || ''}">${d ? esc(d.label) : ''}</span>`); }).join('')
+    || '<div class="hempty">No open tasks assigned to you. Add yourself in the People column of a board to see tasks here.</div>';
+  // Team: who's working now (staff) or my team (members)
+  if (isStaff()) {
+    $('homeTeamTitle').textContent = 'Working now';
+    const now = activeMembers().filter(m => statusOf(m.uid) !== 'out').sort((a, b) => (openShiftOf(a.uid)?.start || 0) - (openShiftOf(b.uid)?.start || 0));
+    $('homeWorking').innerHTML = now.map(m => { const s = openShiftOf(m.uid), st = statusOf(m.uid);
+      return `<div class="hrow person"><span class="av" style="--h:${hue(m.name)}">${esc(initials(m.name))}</span><span class="t"><b>${esc(m.name)}</b><small>${st === 'brk' ? 'On break' : 'Since ' + fmtTime(s.start)}${s.siteName ? ' · ' + esc(s.siteName) : ''}</small></span><span class="d">${fmtDur(workedMs(s))}</span></div>`; }).join('')
+      || '<div class="hempty">Nobody is clocked in right now.</div>';
+  } else {
+    const t = myMember.teamId;
+    $('homeTeamTitle').textContent = t ? teamName(t) : 'My team';
+    const mates = directory.filter(m => t && m.teamId === t);
+    $('homeWorking').innerHTML = mates.map(m => `<div class="hrow person"><span class="av" style="--h:${hue(m.name)}">${esc(initials(m.name))}</span><span class="t"><b>${esc(m.name)}${m.uid === user.uid ? ' (you)' : ''}</b><small>${ROLE_LABEL[m.role] || ''}</small></span><span></span></div>`).join('')
+      || '<div class="hempty">You\'re not in a team yet. An admin can add you from People.</div>';
+  }
+  // Boards with progress
+  $('homeBoards').innerHTML = boardList().map(b => {
+    const items = cards.filter(c => !c.parentId && onBoard(c, b.id));
+    const done = items.filter(c => cardStatus(c) === 'done').length, late = items.filter(c => c.due && day(c.due) < 0 && cardStatus(c) !== 'done').length;
+    return `<button type="button" class="hboard" data-board="${b.id}"><b>${esc(b.name)}</b>
+      ${barHtml(items, cardStatus, STATUSES) || '<div class="bar"></div>'}
+      <small>${items.length ? `${done} of ${items.length} done${late ? ` · <span style="color:var(--out)">${late} overdue</span>` : ''}` : 'No items yet'}</small></button>`;
+  }).join('') || '<div class="hempty">No boards yet. Admins create one per team in Teams.</div>';
+  // Recently updated (ignores the bulk import itself)
+  const recent = cards.filter(c => c.updatedAt && !(c.importedFrom && c.updatedAt - c.createdAt < 60000)).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6);
+  $('homeRecent').innerHTML = recent.map(c => taskRow(c, `<span class="d">${ago(c.updatedAt)}</span>`)).join('') || '<div class="hempty">Nothing changed yet.</div>';
+}
+$('homeActions').onclick = e => { const b = e.target.closest('[data-act]'); if (b) act(b.dataset.act); };
+document.querySelector('[data-view="home"]').addEventListener('click', e => {
+  const pop = e.target.closest('[data-pop]'); if (pop) { e.stopPropagation(); openPop(pop.dataset.pop, pop.dataset.id, pop); return; }
+  const go = e.target.closest('[data-go]'); if (go) { setTab(go.dataset.go); return; }
+  const b = e.target.closest('[data-board]'); if (b) { setTab('board', b.dataset.board); return; }
+  const o = e.target.closest('[data-open]'); if (o) openCard(o.dataset.open);
+});
+
 // ---------- Tabs ----------
-const TITLES = { clock: 'Clock', mytasks: 'My tasks', sheet: 'Timesheets', people: 'People', teams: 'Teams', map: 'Map', board: 'Board', settings: 'Settings' };
+const TITLES = { home: 'Home', clock: 'Clock', mytasks: 'My tasks', sheet: 'Timesheets', people: 'People', teams: 'Teams', map: 'Map', board: 'Board', settings: 'Settings' };
 function setTab(t, board) {
   tab = t;
   if (board) { boardTeam = board; try { localStorage.setItem('zb-board', board); } catch (e) {} }
@@ -1513,5 +1596,5 @@ $('menuBtn').onclick = () => document.body.classList.toggle('side-open');
 $('scrim').onclick = () => document.body.classList.remove('side-open');
 
 // Live timers
-setInterval(renderClock, 1000);
+setInterval(() => { renderClock(); renderHomeClock(); }, 1000);
 setInterval(() => { if (tab === 'people') renderPeople(); if (tab === 'sheet') renderSheet(); }, 30000);
