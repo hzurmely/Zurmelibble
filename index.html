@@ -25,6 +25,7 @@
   body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); padding-bottom: env(safe-area-inset-bottom); }
   [hidden] { display: none !important; }
   html, body { overflow-x: hidden; }
+  @supports (overflow: clip) { html, body { overflow-x: clip; } }
 
   /* App shell: Plaky-style sidebar + top bar */
   .shell { display: flex; min-height: 100vh; }
@@ -244,6 +245,17 @@
   .hboard small { color: var(--muted); font-size: 12.5px; }
   .hempty { color: var(--muted); font-size: 14px; padding: 6px 2px; }
   @media (max-width: 900px) { .hrow { grid-template-columns: 86px minmax(0, 1fr) auto; } .home-hero h2 { font-size: 22px; } .home-grid { grid-template-columns: minmax(0, 1fr); } .home-grid .span2, .home-grid .span3 { grid-column: auto; } .hstats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  /* Phones, Home only: logo that docks next to the page title while scrolling */
+  #homeLogo, .home-logo-slot { display: none; }
+  @media (max-width: 900px) {
+    body.home-logo-on .home-logo-slot { display: block; height: 58px; margin-bottom: 10px; }
+    body.home-logo-on #homeLogo { display: block; position: fixed; left: 0; top: 0; z-index: 1000; transform-origin: 0 0; pointer-events: none; will-change: transform; transition: opacity .2s; }
+    body.home-logo-on.side-open #homeLogo { opacity: 0; }
+    #homeLogo .brand-logo { height: 58px; width: auto; }
+    #homeLogo .brand-default { display: block; font-size: 40px; line-height: 58px; font-weight: 800; white-space: nowrap; }
+    #homeLogo .brand-default > span { color: var(--accent); }
+  }
 
   /* My tasks */
   .mt .tgrid { --cols: minmax(240px, 1fr) 170px 140px 120px 130px; }
@@ -490,6 +502,7 @@
     <!-- Home -->
     <section data-view="home" hidden>
       <div class="home-hero">
+        <div class="home-logo-slot" id="homeLogoSlot"></div>
         <h2 id="homeHello">Hello</h2>
         <div class="muted" id="homeDate"></div>
       </div>
@@ -750,6 +763,8 @@
   </form>
 </dialog>
 <div id="pop" hidden></div>
+<!-- Phones, Home only: big logo above the greeting that slides into the top bar on scroll -->
+<div id="homeLogo" aria-hidden="true"><img class="brand-logo" src="brands/cefast/logo-white.svg" alt=""><span class="brand-default">⏱ <span>Zurmel</span>ibble</span></div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

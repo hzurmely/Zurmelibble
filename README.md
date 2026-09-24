@@ -36,3 +36,7 @@ A simple Jibble style time tracking app. Runs on the web (GitHub Pages) and on A
 ## How people join
 
 In **Settings**, copy the invite message and send it. People install the APK (or open the link), create an account and enter the code. Put them in a team and pick their role in the **People** tab.
+
+## APK signing (updates without reinstalling)
+
+Android only installs an update if it's signed with the same key as the installed app. The workflow signs every build with the key stored in the repository secret `ANDROID_DEBUG_KEYSTORE` (the base64 of a keystore with alias `androiddebugkey`, passwords `android`) and gives each build a higher version code (`1.0.<build number>`). Keep a backup of the keystore: if it's lost, phones need one uninstall to switch to a new key.

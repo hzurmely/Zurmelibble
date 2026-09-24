@@ -329,6 +329,7 @@ function setScreen(name) {
   if (name === 'app') { if ($('orgSwitch').parentNode.id !== 'sideOrgBox') { $('sideOrgBox').append($('orgSwitch')); $('sideFoot').append($('signOut')); } }
   else if ($('orgSwitch').parentNode.id !== 'whoBox') { $('whoBox').prepend($('orgSwitch')); $('whoBox').append($('signOut')); }
   show($('meAv'), name === 'app');
+  if (name !== 'app') document.body.classList.remove('home-logo-on');
   if (name !== 'app') document.body.classList.remove('side-open');
   document.querySelectorAll('[data-view]').forEach(v => show(v, name === 'app' && v.dataset.view === tab));
 }
@@ -803,6 +804,7 @@ function render() {
   startWatch();
   renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap(); renderBoard(); renderMyTasks(); renderHome();
   syncDrawer();
+  queueLogo();
 }
 
 // ---------- Organisation awaiting / refused approval ----------
@@ -1574,6 +1576,29 @@ function renderHome() {
   const recent = cards.filter(c => c.updatedAt && !(c.importedFrom && c.updatedAt - c.createdAt < 60000)).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6);
   $('homeRecent').innerHTML = recent.map(c => taskRow(c, `<span class="d">${ago(c.updatedAt)}</span>`)).join('') || '<div class="hempty">Nothing changed yet.</div>';
 }
+// Phones, Home only: the logo sits above the greeting and, as you scroll, rises,
+// shrinks and docks to the right of the page title in the top bar.
+let logoRaf = 0;
+function placeHomeLogo() {
+  logoRaf = 0;
+  const el = $('homeLogo');
+  const on = tab === 'home' && isActive() && !document.body.classList.contains('noside') && matchMedia('(max-width: 900px)').matches;
+  document.body.classList.toggle('home-logo-on', on);
+  if (!on) return;
+  const h0 = el.offsetHeight; if (!h0) return;
+  const slot = $('homeLogoSlot').getBoundingClientRect(), title = $('pageTitle').getBoundingClientRect();
+  const endH = 30, s1 = endH / h0;
+  const endLeft = title.right + 12, endTop = title.top + (title.height - endH) / 2;
+  // Slide right and shrink first (so it never covers the title), rise into the bar over the whole scroll.
+  const ease = t => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
+  const p = scrollY / 120, ex = ease(p * 3), ey = ease(p);
+  const x = slot.left + (endLeft - slot.left) * ex, y = slot.top + (endTop - slot.top) * ey, sc = 1 + (s1 - 1) * ex;
+  el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${sc.toFixed(4)})`;
+}
+const queueLogo = () => { if (!logoRaf) logoRaf = requestAnimationFrame(placeHomeLogo); };
+addEventListener('scroll', queueLogo, { passive: true });
+addEventListener('resize', queueLogo);
+$('homeLogo').querySelector('img').addEventListener('load', queueLogo);
 $('homeActions').onclick = e => { const b = e.target.closest('[data-act]'); if (b) act(b.dataset.act); };
 document.querySelector('[data-view="home"]').addEventListener('click', e => {
   const pop = e.target.closest('[data-pop]'); if (pop) { e.stopPropagation(); openPop(pop.dataset.pop, pop.dataset.id, pop); return; }
