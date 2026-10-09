@@ -225,6 +225,7 @@
   .hstat small { color: var(--muted); font-size: 12px; }
   .hstat b { font-size: 22px; font-variant-numeric: tabular-nums; }
   .hstat.alert b { color: var(--out); }
+  .hstat b small.of { font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--muted); white-space: nowrap; }
   .hweek { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; height: 130px; }
   .hday { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; height: 100%; gap: 3px; text-align: center; font-size: 11px; color: var(--muted); }
   .hday .col { display: flex; align-items: flex-end; justify-content: center; min-height: 0; }
@@ -260,6 +261,24 @@
     #homeLogo .brand-default { display: block; font-size: 40px; line-height: 58px; font-weight: 800; white-space: nowrap; }
     #homeLogo .brand-default > span { color: var(--accent); }
   }
+
+  /* Weekly hour goals */
+  .weekgoal { display: grid; gap: 5px; justify-items: center; font-size: 14px; color: var(--muted); width: min(320px, 100%); }
+  .weekgoal:empty { display: none; }
+  .weekgoal .gbar { width: 100%; }
+  .weekgoal .warn { color: var(--brk); }
+  .gbar { display: block; height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .gbar > span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .3s; }
+  .gbar.met > span { background: var(--in); }
+  .wk { display: grid; gap: 4px; min-width: 120px; }
+  .wk small { color: var(--muted); }
+  .goal-in { width: 80px; padding: 5px 8px; font-size: 13px; }
+  .shiftrows { display: grid; gap: 8px; }
+  .shiftlbl { width: 86px; }
+  .days { display: flex; flex-wrap: wrap; gap: 6px; }
+  .days label { border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; font-size: 13px; cursor: pointer; user-select: none; }
+  .days label input { display: none; }
+  .days label:has(input:checked) { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
   /* My tasks */
   .mt .tgrid { --cols: minmax(240px, 1fr) 170px 140px 120px 130px; }
@@ -515,6 +534,7 @@
           <div class="hc-top"><span id="homeStatus" class="badge s-out">Clocked out</span><span class="muted" id="homeTeam"></span></div>
           <div class="bigtime" id="homeToday">0:00:00</div>
           <div class="muted">worked today</div>
+          <div class="weekgoal" id="homeWeekGoal"></div>
           <div class="clock-actions" id="homeActions"></div>
           <div class="muted" id="homeNote"></div>
         </div>
@@ -523,7 +543,7 @@
             <button type="button" class="hstat" data-go="mytasks"><small>My open tasks</small><b id="hsOpen">0</b></button>
             <button type="button" class="hstat" data-go="mytasks" id="hsOverBox"><small>Overdue</small><b id="hsOver">0</b></button>
             <button type="button" class="hstat" data-go="mytasks"><small>Due in 7 days</small><b id="hsWeek">0</b></button>
-            <button type="button" class="hstat" data-go="sheet"><small>Hours this week</small><b id="hsHours">0h 00m</b></button>
+            <button type="button" class="hstat" data-go="sheet"><small id="hsHoursLabel">Hours this week</small><b id="hsHours">0h 00m</b><span class="gbar" id="hsHoursBar" hidden><span></span></span></button>
           </div>
           <div class="hweek" id="homeWeek"></div>
         </div>
@@ -553,6 +573,7 @@
         <span id="myStatus" class="badge s-out">Clocked out</span>
         <div class="bigtime" id="myToday">0:00:00</div>
         <div class="muted">worked today</div>
+        <div class="weekgoal" id="clockWeek"></div>
         <div class="clock-actions" id="myActions"></div>
         <div class="muted" id="geoStatus"></div>
         <div class="muted" id="geoNote"></div>
@@ -574,10 +595,11 @@
           <div class="stat"><small>Shifts</small><b id="sCount">0</b></div>
           <div class="stat"><small>Total worked</small><b id="sTotal">0h 00m</b></div>
           <div class="stat"><small>Total breaks</small><b id="sBreaks">0h 00m</b></div>
+          <div class="stat"><small>Counts toward goals</small><b id="sCounted">0h 00m</b></div>
         </div>
         <div class="table-wrap">
           <table class="rtable">
-            <thead><tr><th>Member</th><th>Team</th><th>Date</th><th>In</th><th>Out</th><th>Breaks</th><th>Worked</th><th>Location</th><th data-need="staff" hidden></th></tr></thead>
+            <thead><tr><th>Member</th><th>Team</th><th>Date</th><th>In</th><th>Out</th><th>Breaks</th><th>Worked</th><th title="Time inside the counting shifts">Counts</th><th>Location</th><th data-need="staff" hidden></th></tr></thead>
             <tbody id="sheet"></tbody>
           </table>
         </div>
@@ -606,7 +628,7 @@
         <p class="muted" style="margin-top:-6px" id="peopleHint"></p>
         <div class="table-wrap">
           <table class="rtable">
-            <thead><tr><th>Name</th><th>Status</th><th>Since</th><th>Today</th><th>Team</th><th>Role</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Status</th><th>Since</th><th>Today</th><th>This week</th><th>Weekly goal</th><th>Team</th><th>Role</th><th></th></tr></thead>
             <tbody id="people"></tbody>
           </table>
         </div>
@@ -693,6 +715,22 @@
           <input id="orgNameInput" required maxlength="80">
           <button type="submit">Save name</button>
           <div class="ok" id="orgNameMsg"></div>
+        </form>
+        <form class="card stack" id="hoursForm" data-need="admin" hidden style="grid-column:1/-1">
+          <h2>Weekly hours</h2>
+          <p class="muted" style="margin:0">Set the shifts when time counts toward each person's weekly goal. People can clock in any time and everything is still logged, but only the time inside these shifts counts. Goals for each person are set in People.</p>
+          <div class="switch-row">
+            <div><b>Only count time inside the shifts</b><div class="muted">Off: every hour worked counts toward the goal.</div></div>
+            <label class="toggle"><input type="checkbox" id="hrOn"><span></span></label>
+          </div>
+          <div class="shiftrows">
+            <div class="row"><b class="shiftlbl">Shift 1</b><input type="time" id="hrS1a" required> <span class="muted">to</span> <input type="time" id="hrS1b" required></div>
+            <div class="row"><label class="chk shiftlbl"><input type="checkbox" id="hrS2on"> <b>Shift 2</b></label><input type="time" id="hrS2a"> <span class="muted">to</span> <input type="time" id="hrS2b"></div>
+          </div>
+          <div class="days" id="hrDays"></div>
+          <label class="row muted">Default weekly goal <input type="number" id="hrGoal" min="0" max="168" step="0.5" placeholder="none" style="width:100px"> hours, for people without their own goal</label>
+          <div class="row"><button type="submit">Save weekly hours</button><span class="ok" id="hrMsg"></span></div>
+          <div class="err" id="hrErr"></div>
         </form>
         <div class="card stack" data-need="admin" hidden style="grid-column:1/-1">
           <h2>Work sites</h2>

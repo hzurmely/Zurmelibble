@@ -461,6 +461,101 @@ async function act(kind) {
 }
 $('myActions').onclick = e => { const b = e.target.closest('[data-act]'); if (b) act(b.dataset.act); };
 
+// ---------- Weekly hour goals ----------
+// orgs/{id}.hourRules = { enabled, days: [0..6], shifts: [{ start: 'HH:MM', end: 'HH:MM' }], defaultGoal }
+// members/{uid}.weeklyGoal = hours (or null to use the default)
+const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const hourRules = () => org?.hourRules || null;
+const countsShiftsOnly = () => !!(hourRules()?.enabled && hourRules().shifts?.length && hourRules().days?.length);
+const atTime = (d, hhmm) => { const [h, m] = hhmm.split(':').map(Number); const x = new Date(d); x.setHours(h, m, 0, 0); return x.getTime(); };
+// Counting windows (absolute ms ranges) overlapping [from, to].
+function countWindows(from, to) {
+  if (!countsShiftsOnly()) return [[from, to]];
+  const r = hourRules(), out = [];
+  const d = new Date(from); d.setHours(0, 0, 0, 0);
+  for (; d.getTime() < to; d.setDate(d.getDate() + 1)) {
+    if (!r.days.includes(d.getDay())) continue;
+    for (const sh of r.shifts) {
+      const lo = Math.max(atTime(d, sh.start), from), hi = Math.min(atTime(d, sh.end), to);
+      if (hi > lo) out.push([lo, hi]);
+    }
+  }
+  return out;
+}
+const overlap = (a, b, c, d) => Math.max(0, Math.min(b, d) - Math.max(a, c));
+// Worked time of a shift that counts toward goals, optionally clipped to [from, to).
+function countedMs(s, from = -Infinity, to = Infinity, now = Date.now()) {
+  const a = Math.max(s.start, from), b = Math.min(s.end || now, to);
+  if (b <= a) return 0;
+  return countWindows(a, b).reduce((t, [lo, hi]) => t + (hi - lo)
+    - (s.breaks || []).reduce((bt, br) => bt + overlap(br.start, br.end || now, lo, hi), 0), 0);
+}
+const isCountingNow = (t = Date.now()) => countWindows(t, t + 1).length > 0;
+function weekStart(ref = new Date()) { const d = new Date(ref); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; }
+function weekCountedMs(uid, ref = new Date()) {
+  const from = weekStart(ref).getTime(), to = from + 7 * 864e5;
+  return shifts.filter(s => s.uid === uid && s.start < to && (s.end || Date.now()) > from).reduce((t, s) => t + countedMs(s, from, to), 0);
+}
+function goalOf(m) {
+  const g = m?.weeklyGoal ?? hourRules()?.defaultGoal;
+  return typeof g === 'number' && g > 0 ? g : null;
+}
+const fmtHrs = h => `${Math.floor(h)}h${h % 1 ? ' ' + String(Math.round((h % 1) * 60)).padStart(2, '0') + 'm' : ''}`;
+const shiftsText = () => countsShiftsOnly() ? hourRules().shifts.map(s => `${s.start}–${s.end}`).join(' and ') : '';
+// "6h 10m of 12h" with a progress bar, plus a note when the current time doesn't count.
+function weekGoalHtml(uid, withNote) {
+  const m = uid === user.uid ? myMember : members.find(x => x.uid === uid);
+  const done = weekCountedMs(uid), goal = goalOf(m);
+  if (!goal && !countsShiftsOnly()) return '';
+  let html = goal
+    ? `<span>This week <b>${fmtDur(done)}</b> of ${fmtHrs(goal)}${done >= goal * 3600e3 ? ' ✓' : ''}</span><span class="gbar${done >= goal * 3600e3 ? ' met' : ''}"><span style="width:${Math.min(100, done / (goal * 36e3))}%"></span></span>`
+    : `<span>This week <b>${fmtDur(done)}</b> counted</span>`;
+  if (withNote && countsShiftsOnly()) {
+    const open = openShiftOf(uid);
+    html += open && !isCountingNow()
+      ? `<span class="warn">Outside the counting shifts (${shiftsText()}). This time is logged but doesn't count toward your goal.</span>`
+      : `<small>Counts ${shiftsText()}, ${hourRules().days.slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(d => DAY_SHORT[d]).join(' ')}</small>`;
+  }
+  return html;
+}
+
+// Settings: Weekly hours card (admins)
+function renderHoursForm() {
+  if (!isAdmin() || !org || $('hoursForm').contains(document.activeElement)) return;
+  const r = hourRules() || {}, sh = r.shifts || [];
+  $('hrOn').checked = r.enabled ?? true;
+  $('hrS1a').value = sh[0]?.start || '08:00'; $('hrS1b').value = sh[0]?.end || '12:00';
+  $('hrS2on').checked = sh.length > 1 || !r.shifts;
+  $('hrS2a').value = sh[1]?.start || '13:00'; $('hrS2b').value = sh[1]?.end || '17:00';
+  const days = r.days || [1, 2, 3, 4, 5];
+  $('hrDays').innerHTML = [1, 2, 3, 4, 5, 6, 0].map(d => `<label><input type="checkbox" value="${d}" ${days.includes(d) ? 'checked' : ''}>${DAY_SHORT[d]}</label>`).join('');
+  $('hrGoal').value = r.defaultGoal ?? '';
+  syncHoursForm();
+}
+function syncHoursForm() {
+  const on = $('hrOn').checked;
+  ['hrS1a', 'hrS1b', 'hrS2on'].forEach(id => $(id).disabled = !on);
+  ['hrS2a', 'hrS2b'].forEach(id => $(id).disabled = !on || !$('hrS2on').checked);
+  $('hrDays').querySelectorAll('input').forEach(i => i.disabled = !on);
+}
+$('hrOn').onchange = syncHoursForm; $('hrS2on').onchange = syncHoursForm;
+$('hoursForm').onsubmit = e => {
+  e.preventDefault(); $('hrErr').textContent = ''; $('hrMsg').textContent = '';
+  const toM = v => { const [h, m] = v.split(':').map(Number); return h * 60 + m; };
+  const shifts2 = [{ start: $('hrS1a').value, end: $('hrS1b').value }];
+  if ($('hrS2on').checked) shifts2.push({ start: $('hrS2a').value, end: $('hrS2b').value });
+  const enabled = $('hrOn').checked;
+  if (enabled) {
+    if (shifts2.some(s => !s.start || !s.end || toM(s.end) <= toM(s.start))) { $('hrErr').textContent = 'Each shift needs a start time before its end time.'; return; }
+    if (shifts2.length === 2 && toM(shifts2[1].start) < toM(shifts2[0].end) && toM(shifts2[0].start) < toM(shifts2[1].end)) { $('hrErr').textContent = 'The two shifts overlap. Make shift 2 start after shift 1 ends.'; return; }
+  }
+  const days = [...$('hrDays').querySelectorAll('input:checked')].map(i => +i.value);
+  if (enabled && !days.length) { $('hrErr').textContent = 'Pick at least one day.'; return; }
+  const g = $('hrGoal').value === '' ? null : Math.min(168, Math.max(0, +$('hrGoal').value));
+  shifts2.sort((a, b) => toM(a.start) - toM(b.start));
+  safe(async () => { await updateDoc(orgRef(), { hourRules: { enabled, shifts: shifts2, days, defaultGoal: g } }); $('hrMsg').textContent = 'Saved.'; document.activeElement?.blur(); });
+};
+
 // ---------- Rendering ----------
 // Copy each column header onto its cells so tables can stack as cards on phones.
 function labelCells(tbody) {
@@ -479,6 +574,8 @@ function renderClock() {
   const badge = $('myStatus');
   badge.className = 'badge s-' + st; badge.textContent = STATUS[st];
   $('myToday').textContent = fmtClock(todayMs(user.uid));
+  const wk = weekGoalHtml(user.uid, true);
+  if ($('clockWeek').innerHTML !== wk) $('clockWeek').innerHTML = wk;
   const box = $('myActions');
   if (box.dataset.state !== st + busy) {
     box.dataset.state = st + busy;
@@ -511,11 +608,12 @@ function renderSheet() {
   $('sCount').textContent = rows.length;
   $('sTotal').textContent = fmtDur(rows.reduce((t, s) => t + workedMs(s), 0));
   $('sBreaks').textContent = fmtDur(rows.reduce((t, s) => t + breakMs(s), 0));
+  $('sCounted').textContent = fmtDur(rows.reduce((t, s) => t + countedMs(s), 0));
   show($('sheetEmpty'), !rows.length);
   $('sheet').innerHTML = rows.map(s => `<tr>
     <td>${esc(nameOf(s.uid))}</td><td>${esc(teamName(s.teamId))}</td><td>${fmtDate(s.start)}</td>
     <td>${fmtTime(s.start)}</td><td>${fmtTime(s.end)}${s.autoOut ? ' <span class="badge s-brk" title="Clocked out automatically after leaving the work site">auto</span>' : ''}</td>
-    <td>${fmtDur(breakMs(s))}</td><td><b>${fmtDur(workedMs(s))}</b></td>
+    <td>${fmtDur(breakMs(s))}</td><td><b>${fmtDur(workedMs(s))}</b></td><td>${fmtDur(countedMs(s))}</td>
     <td>${s.siteName ? esc(s.siteName) + '<br>' : ''}${mapsLink(s.inLoc)}</td>
     ${isStaff() ? `<td><button class="b-ghost b-sm" data-del="${s.id}">Delete</button></td>` : ''}
   </tr>`).join(''); labelCells($('sheet'));
@@ -530,9 +628,9 @@ $('sheet').onclick = async e => {
 
 $('exportCsv').onclick = () => {
   const loc = l => l ? `${l.lat},${l.lng}` : '';
-  const lines = [['Member', 'Team', 'Date', 'Clock in', 'Clock out', 'Break minutes', 'Worked minutes', 'Site', 'In location', 'Out location', 'Auto clock-out']]
+  const lines = [['Member', 'Team', 'Date', 'Clock in', 'Clock out', 'Break minutes', 'Worked minutes', 'Counted minutes', 'Site', 'In location', 'Out location', 'Auto clock-out']]
     .concat(filtered().map(s => [nameOf(s.uid), teamName(s.teamId), fmtDate(s.start), fmtTime(s.start), s.end ? fmtTime(s.end) : '',
-      Math.round(breakMs(s) / 60000), Math.round(workedMs(s) / 60000), s.siteName || '', loc(s.inLoc), loc(s.outLoc), s.autoOut ? 'yes' : '']));
+      Math.round(breakMs(s) / 60000), Math.round(workedMs(s) / 60000), Math.round(countedMs(s) / 60000), s.siteName || '', loc(s.inLoc), loc(s.outLoc), s.autoOut ? 'yes' : '']));
   const csv = lines.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -543,6 +641,7 @@ const teamOptions = sel => `<option value="">No team</option>` + teams.map(t => 
 
 function renderPeople() {
   if (!isStaff()) return;
+  if ($('people').contains(document.activeElement) && document.activeElement.matches('input')) return;   // typing a goal
   const act = activeMembers();
   const st = act.map(u => statusOf(u.uid));
   $('pScope').textContent = isAdmin() ? 'People' : `People in ${teamName(myMember.teamId)}`;
@@ -576,6 +675,10 @@ function renderPeople() {
       <td><span class="badge s-${s}">${STATUS[s]}</span></td>
       <td>${open ? fmtTime(open.start) : ''}</td>
       <td>${fmtDur(todayMs(u.uid))}</td>
+      <td>${weekCell(u)}</td>
+      <td>${isAdmin() && (!owner || role() === 'owner')
+        ? `<input class="goal-in" type="number" min="0" max="168" step="0.5" data-goal="${u.uid}" value="${u.weeklyGoal ?? ''}" placeholder="${hourRules()?.defaultGoal ?? '–'}" title="Weekly goal in hours. Empty uses the default from Settings."> h`
+        : (goalOf(u) ? fmtHrs(goalOf(u)) : '<span class="muted">none</span>')}</td>
       <td>${teamCell}</td>
       <td>${roleCell}</td>
       <td>${canEdit ? `<button class="b-ghost b-sm" data-remove="${u.uid}">Remove</button>` : ''}</td>
@@ -583,6 +686,20 @@ function renderPeople() {
   }).join(''); labelCells($('people'));
 }
 
+function weekCell(u) {
+  const done = weekCountedMs(u.uid), goal = goalOf(u);
+  if (!goal) return fmtDur(done);
+  const met = done >= goal * 3600e3;
+  return `<span class="wk"><span>${fmtDur(done)} <small>of ${fmtHrs(goal)}${met ? ' ✓' : ''}</small></span><span class="gbar${met ? ' met' : ''}"><span style="width:${Math.min(100, done / (goal * 36e3))}%"></span></span></span>`;
+}
+$('people').addEventListener('change', e => {
+  const i = e.target.closest('[data-goal]'); if (!i) return;
+  const v = i.value.trim() === '' ? null : Math.min(168, Math.max(0, Math.round(+i.value * 2) / 2));
+  i.blur();
+  safe(() => updateDoc(orgRef('members', i.dataset.goal), { weeklyGoal: v }));
+});
+$('people').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-goal]')) e.target.blur(); });
+$('people').addEventListener('focusout', e => { if (e.target.matches('[data-goal]')) setTimeout(renderPeople, 0); });
 async function safe(fn) { try { return await fn(); } catch (err) { alert(niceError(err)); render(); } }
 
 $('people').onchange = e => {
@@ -679,6 +796,7 @@ function renderSettings() {
   $('inviteCode').textContent = org.code;
   $('requireApproval').checked = !!org.requireApproval;
   if (document.activeElement !== $('orgNameInput')) $('orgNameInput').value = org.name;
+  renderHoursForm();
 }
 const inviteLink = () => `${location.origin}${location.pathname}?join=${org.code}${org.brand ? '&brand=' + org.brand : ''}`;
 $('copyInvite').onclick = async () => {
@@ -799,7 +917,7 @@ function render() {
   $('meAv').textContent = initials(profile.name || user.email); $('meAv').style.setProperty('--h', hue(profile.name || '')); $('meAv').title = profile.name || '';
   $('pageTitle').textContent = tab === 'board' ? currentBoard().name : TITLES[tab];
   document.title = `${tab === 'board' ? currentBoard().name : TITLES[tab]} · ${org?.name || 'Zurmelibble'}`;
-  document.body.classList.toggle('wide', tab === 'board' || tab === 'mytasks' || tab === 'home');
+  document.body.classList.toggle('wide', ['board', 'mytasks', 'home', 'people', 'sheet'].includes(tab));
   setScreen('app');
   startWatch();
   renderClock(); renderGeo(); renderSheet(); renderPeople(); renderTeams(); renderSettings(); renderSites(); renderMap(); renderBoard(); renderMyTasks(); renderHome();
@@ -1519,6 +1637,8 @@ function renderHomeClock() {
   $('homeStatus').className = 'badge s-' + st; $('homeStatus').textContent = STATUS[st];
   $('homeTeam').textContent = myMember.teamId ? teamName(myMember.teamId) : '';
   $('homeToday').textContent = fmtClock(todayMs(user.uid));
+  const wk = weekGoalHtml(user.uid, true);
+  if ($('homeWeekGoal').innerHTML !== wk) $('homeWeekGoal').innerHTML = wk;
   const box = $('homeActions');
   if (box.dataset.state !== st + busy) { box.dataset.state = st + busy; box.innerHTML = $('myActions').innerHTML; }
   $('homeNote').textContent = $('geoNote').textContent || $('geoStatus').textContent;
@@ -1540,8 +1660,13 @@ function renderHome() {
   // Hours this week (Mon to Sun)
   const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(monday); d.setDate(monday.getDate() + i); return d; });
-  const perDay = days.map(d => shifts.filter(s => s.uid === user.uid && sameDay(s.start, d)).reduce((t, s) => t + workedMs(s), 0));
-  $('hsHours').textContent = fmtDur(perDay.reduce((a, b) => a + b, 0));
+  // Only time inside the counting shifts (if set) counts toward the week.
+  const perDay = days.map(d => { const a = d.getTime(), b = a + 864e5; return shifts.filter(s => s.uid === user.uid && s.start < b && (s.end || Date.now()) > a).reduce((t, s) => t + countedMs(s, a, b), 0); });
+  const weekMs = perDay.reduce((a, b) => a + b, 0), goal = goalOf(myMember);
+  $('hsHours').innerHTML = goal ? `${fmtDur(weekMs)} <small class="of">of ${fmtHrs(goal)}</small>` : fmtDur(weekMs);
+  $('hsHoursLabel').textContent = goal ? 'Weekly goal' : 'Hours this week';
+  show($('hsHoursBar'), !!goal);
+  if (goal) { $('hsHoursBar').classList.toggle('met', weekMs >= goal * 3600e3); $('hsHoursBar').firstElementChild.style.width = Math.min(100, weekMs / (goal * 36e3)) + '%'; }
   const max = Math.max(4 * 3600e3, ...perDay);
   $('homeWeek').innerHTML = days.map((d, i) => `<div class="hday${d.toDateString() === new Date().toDateString() ? ' today' : ''}" title="${fmtDur(perDay[i])}">
     <div class="col"><span style="height:${Math.max(2, perDay[i] / max * 100)}%"></span></div>
