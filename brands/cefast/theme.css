@@ -192,3 +192,4 @@ html[data-brand="cefast"] .hday.today .col span { background: var(--cf-sky); }
 html[data-brand="cefast"] .hclock .bigtime { font-size: 48px; }
 html[data-brand="cefast"] #homeLogo .brand-logo { height: 58px; }
 html[data-brand="cefast"] #homeLogo .brand-default { display: none; }
+html[data-brand="cefast"] .hstat b small.of { font-size: 13px; letter-spacing: 0; text-transform: none; font-weight: 600; }
