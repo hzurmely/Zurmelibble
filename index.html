@@ -280,6 +280,20 @@
   .days label input { display: none; }
   .days label:has(input:checked) { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
+  /* Comments */
+  .composer { display: grid; gap: 6px; }
+  .comlist { display: grid; gap: 8px; }
+  .comment { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+  .chead { display: flex; align-items: center; gap: 8px; font-size: 13.5px; min-width: 0; }
+  .chead .av { width: 24px; height: 24px; font-size: 9.5px; border: 0; margin: 0; }
+  .chead .muted { font-size: 12.5px; white-space: nowrap; }
+  .cacts { margin-left: auto; display: flex; gap: 2px; }
+  .ctext { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; }
+  .ctext a { color: var(--accent); }
+  .cbub, .kbub { flex: none; display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); cursor: pointer; padding: 2px 5px; border-radius: 6px; }
+  .cbub:hover, .kbub:hover { background: var(--hover); color: var(--text); }
+  .cbub svg, .kbub svg { width: 14px; height: 14px; }
+
   /* My tasks */
   .mt .tgrid { --cols: minmax(240px, 1fr) 170px 140px 120px 130px; }
   .mt .board-name { font-size: 12.5px; color: var(--muted); justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -783,6 +797,10 @@
       <div class="sublist" id="cSubs"></div>
       <div id="cAddSub"><input placeholder="+ Add subitem, then press Enter" maxlength="200" enterkeyhint="done"></div>
     </div>
+    <div class="dsec" id="cComTitle">Comments</div>
+    <div class="composer"><textarea id="cComText" rows="2" placeholder="Write a comment… (Ctrl+Enter to post)" maxlength="5000"></textarea>
+      <div class="row" style="justify-content:flex-end"><button type="button" class="b-sm" id="cComPost">Comment</button></div></div>
+    <div class="comlist" id="cComments"></div>
     <div class="muted" id="cMeta"></div>
     <div class="row" style="justify-content:space-between">
       <button type="button" class="b-ghost" id="cDelete">Delete</button>

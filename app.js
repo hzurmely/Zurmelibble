@@ -39,7 +39,7 @@ let shifts = [];          // shifts visible to me
 let userUnsubs = [], orgUnsubs = [], dataUnsubs = [];
 let dataKey = '';
 let tab = 'home';
-let directory = [], lists = [], cards = [];
+let directory = [], lists = [], cards = [], comments = [];
 let boardTeam = '', boardMine = false, boardSearch = '', dragging = false, boardSortables = [];
 try { boardTeam = localStorage.getItem('zb-board') || ''; } catch (e) {}
 let onboarding = false;   // user chose "create or join another"
@@ -294,7 +294,7 @@ function openOrg(id) {
 
 function subscribeData() {
   stop(dataUnsubs);
-  members = []; teams = []; shifts = []; directory = []; lists = []; cards = [];
+  members = []; teams = []; shifts = []; directory = []; lists = []; cards = []; comments = [];
   if (!isActive()) { render(); return; }
   const onErr = err => console.error(err);
   // Board data: everyone in the organisation sees every team's board.
@@ -302,6 +302,7 @@ function subscribeData() {
   // Lists only matter for cards made on the old Trello-style board (their status comes from the list).
   dataUnsubs.push(onSnapshot(orgCol('lists'), s => { lists = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, onErr));
   dataUnsubs.push(onSnapshot(query(orgCol('cards'), limit(5000)), s => { cards = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, onErr));
+  dataUnsubs.push(onSnapshot(query(orgCol('comments'), limit(5000)), s => { comments = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, onErr));
   dataUnsubs.push(onSnapshot(orgCol('teams'), s => { teams = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name)); render(); }, onErr));
   const setShifts = s => { shifts = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.start - a.start); render(); };
   const setMembers = s => { members = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); };
@@ -1149,7 +1150,7 @@ function rowHtml(c, sub) {
   const st = statusInfo(c), pr = prioInfo(c), due = dueInfo(c.due, st.id === 'done');
   const kids = sub ? [] : childrenOf(c.id), open = openSubs.has(c.id);
   return `<div class="trow" data-card="${c.id}">
-    <div class="tcell title">${sub ? '' : '<span class="grip" title="Drag to move">⋮⋮</span>'}<span class="ttl" data-open="${c.id}" title="${esc(c.title)}">${esc(c.title)}</span>${c.desc ? '<span class="hasdesc" title="Has notes">≡</span>' : ''}
+    <div class="tcell title">${sub ? '' : '<span class="grip" title="Drag to move">⋮⋮</span>'}<span class="ttl" data-open="${c.id}" title="${esc(c.title)}">${esc(c.title)}</span>${c.desc ? '<span class="hasdesc" title="Has notes">≡</span>' : ''}${bubbleHtml(c)}
       ${sub ? '' : `<span class="subtog${open ? ' open' : ''}${kids.length ? '' : ' none'}" data-subtog="${c.id}" title="${kids.length ? 'Show subitems' : 'Add subitems'}">${SUB_ICON}${kids.length || ''}</span>`}</div>
     <div class="tcell"><span class="pill ${st.cls}" data-pop="status" data-id="${c.id}">${st.label}</span></div>
     <div class="tcell date ${due?.cls || ''}"><span>${due ? esc(due.label) : ''}</span><input type="date" value="${c.due || ''}" data-date="${c.id}" aria-label="Due date"></div>
@@ -1198,7 +1199,7 @@ function kanbanHtml(bid, groups, items) {
         return `<div class="kcard" data-card="${c.id}" style="--g:${g.color}">
           <div class="kcard-tag">${esc(g.name)}</div>
           <div class="kcard-title">${esc(c.title)}</div>
-          <div class="kcard-meta">${pr ? `<span class="pill sm ${pr.cls}">${pr.label}</span>` : ''}${due ? `<span class="kdue ${due.cls}">${esc(due.label)}</span>` : ''}${kids.length ? `<span title="Subitems">${kids.filter(k => cardStatus(k) === 'done').length}/${kids.length} ✓</span>` : ''}${c.desc ? '<span title="Has notes">≡</span>' : ''}${(c.assignees || []).length || (c.assigneeNames || []).length ? peopleHtml(c) : ''}</div>
+          <div class="kcard-meta">${pr ? `<span class="pill sm ${pr.cls}">${pr.label}</span>` : ''}${due ? `<span class="kdue ${due.cls}">${esc(due.label)}</span>` : ''}${kids.length ? `<span title="Subitems">${kids.filter(k => cardStatus(k) === 'done').length}/${kids.length} ✓</span>` : ''}${c.desc ? '<span title="Has notes">≡</span>' : ''}${bubbleHtml(c, 'kbub')}${(c.assignees || []).length || (c.assigneeNames || []).length ? peopleHtml(c) : ''}</div>
         </div>`;
       }).join('')}</div>
       <form class="kadd" data-status="${s.id}"><input placeholder="+ Add item" maxlength="200"></form></div>`;
@@ -1280,7 +1281,12 @@ function newCard(fields) {
 }
 function deleteCardTree(c) {
   const kids = childrenOf(c.id);
-  return safe(async () => { const b = writeBatch(db); kids.forEach(k => b.delete(orgRef('cards', k.id))); b.delete(orgRef('cards', c.id)); await b.commit(); });
+  const ids = [c.id, ...kids.map(k => k.id)];
+  return safe(async () => {
+    const b = writeBatch(db); kids.forEach(k => b.delete(orgRef('cards', k.id))); b.delete(orgRef('cards', c.id)); await b.commit();
+    // Best effort: remove the items' comments too (only ones this person is allowed to delete).
+    await Promise.all(comments.filter(m => ids.includes(m.cardId) && (isAdmin() || m.authorId === user.uid)).map(m => deleteDoc(orgRef('comments', m.id)).catch(() => {})));
+  });
 }
 const patchCard = (id, patch) => { const c = cards.find(x => x.id === id); if (c) Object.assign(c, patch); render(); return safe(() => updateDoc(orgRef('cards', id), { ...patch, updatedAt: Date.now() })); };
 
@@ -1314,6 +1320,7 @@ $('board').addEventListener('click', e => {
   const gm = t.closest('[data-gmenu]');
   if (gm) { e.stopPropagation(); openPop('group', gm.dataset.gmenu, gm); return; }
   if (t.closest('#bAddGroup')) { addGroup(); return; }
+  const oc = t.closest('[data-opencom]'); if (oc) { openComments(oc.dataset.opencom); return; }
   const open = t.closest('[data-open]') || (t.closest('.kcard') && { dataset: { open: t.closest('.kcard').dataset.card } });
   if (open) openCard(open.dataset.open);
 });
@@ -1413,6 +1420,7 @@ function peoplePickHtml(c) {
 }
 function syncDrawer() {
   const c = cards.find(x => x.id === editing); if (!c || !$('cardDlg').open) return;
+  renderComments();
   const parent = c.parentId ? cards.find(x => x.id === c.parentId) : null;
   const boardNm = c.teamId ? teamName(c.teamId) : 'General', grp = c.subsystemId ? subName(c.teamId, c.subsystemId) : '';
   $('cCrumb').innerHTML = [esc(boardNm), grp ? esc(grp) : '', parent ? `<a data-goto="${parent.id}">${esc(parent.title)}</a>` : ''].filter(Boolean).join(' › ');
@@ -1435,6 +1443,8 @@ function openCard(id) {
   $('cMeta').textContent = c.importedFrom === 'plaky' ? `Imported from Plaky on ${fmtDate(c.createdAt)}` : `Created by ${c.createdByName || personName(c.createdBy)} on ${fmtDate(c.createdAt)}`;
   show($('cDelete'), canDeleteCard(c));
   $('cAddSub').querySelector('input').value = '';
+  if (editing !== $('cComText').dataset.card) { $('cComText').value = ''; $('cComText').dataset.card = editing; }
+  editingComment = null;
   $('cStatus').value = cardStatus(c); $('cPrio').value = c.priority || '';
   if (!$('cardDlg').open) $('cardDlg').showModal();
   syncDrawer();
@@ -1749,6 +1759,62 @@ document.querySelector('[data-view="home"]').addEventListener('click', e => {
   const b = e.target.closest('[data-board]'); if (b) { setTab('board', b.dataset.board); return; }
   const o = e.target.closest('[data-open]'); if (o) openCard(o.dataset.open);
 });
+
+// ---------- Comments on board items ----------
+// orgs/{org}/comments/{id}: { cardId, text, authorId, authorName, createdAt, editedAt }
+const COMMENT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12Z"/></svg>';
+let editingComment = null;
+const commentsOf = cardId => comments.filter(c => c.cardId === cardId).sort((a, b) => b.createdAt - a.createdAt);
+const commentCount = cardId => comments.reduce((n, c) => n + (c.cardId === cardId), 0);
+const linkify = s => esc(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+const fmtWhen = ts => new Date(ts).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const bubbleHtml = (c, cls = 'cbub') => { const n = commentCount(c.id); return n ? `<span class="${cls}" data-opencom="${c.id}" title="${n} comment${n === 1 ? '' : 's'}">${COMMENT_ICON}${n}</span>` : ''; };
+function renderComments() {
+  const c = cards.find(x => x.id === editing); if (!c || !$('cardDlg').open) return;
+  const list = commentsOf(c.id);
+  $('cComTitle').textContent = list.length ? `Comments (${list.length})` : 'Comments';
+  if (editingComment && document.activeElement?.classList.contains('cedit')) return;   // don't wipe an edit in progress
+  $('cComments').innerHTML = list.map(m => {
+    const mine = m.authorId === user.uid, canDel = mine || isAdmin();
+    const body = editingComment === m.id
+      ? `<textarea class="cedit" rows="3" maxlength="5000">${esc(m.text)}</textarea><div class="row" style="justify-content:flex-end"><button type="button" class="b-ghost b-sm" data-cancel="${m.id}">Cancel</button><button type="button" class="b-sm" data-saveedit="${m.id}">Save</button></div>`
+      : `<div class="ctext">${linkify(m.text)}</div>`;
+    return `<div class="comment" data-cid="${m.id}">
+      <div class="chead"><span class="av" style="--h:${hue(m.authorName)}">${esc(initials(m.authorName))}</span><b>${esc(m.authorName || 'Someone')}</b>
+        <span class="muted" title="${fmtWhen(m.createdAt)}">${ago(m.createdAt)}${m.editedAt ? ' · edited' : ''}</span>
+        <span class="cacts">${mine && editingComment !== m.id ? `<button type="button" class="tiny" data-editc="${m.id}">Edit</button>` : ''}${canDel ? `<button type="button" class="tiny" data-delc="${m.id}">Delete</button>` : ''}</span></div>
+      ${body}</div>`;
+  }).join('') || '<div class="hempty">No comments yet. Start the conversation.</div>';
+}
+function postComment() {
+  const c = cards.find(x => x.id === editing), text = $('cComText').value.trim();
+  if (!c || !text) return;
+  $('cComText').value = '';
+  safe(async () => {
+    await addDoc(orgCol('comments'), { cardId: c.id, text, authorId: user.uid, authorName: myMember.name || profile?.name || '', createdAt: Date.now() });
+    updateDoc(orgRef('cards', c.id), { updatedAt: Date.now() }).catch(() => {});
+  });
+}
+$('cComPost').onclick = postComment;
+$('cComText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); postComment(); } });
+$('cComments').addEventListener('click', e => {
+  const ed = e.target.closest('[data-editc]'), del = e.target.closest('[data-delc]'), can = e.target.closest('[data-cancel]'), sv = e.target.closest('[data-saveedit]');
+  if (ed) { editingComment = ed.dataset.editc; renderComments(); const t = $('cComments').querySelector('.cedit'); t?.focus(); t?.setSelectionRange(t.value.length, t.value.length); }
+  else if (can) { editingComment = null; renderComments(); }
+  else if (sv) {
+    const text = $('cComments').querySelector('.cedit').value.trim(); if (!text) return;
+    const id = sv.dataset.saveedit; editingComment = null;
+    safe(() => updateDoc(orgRef('comments', id), { text, editedAt: Date.now() })); renderComments();
+  } else if (del) {
+    if (!confirm('Delete this comment?')) return;
+    safe(() => deleteDoc(orgRef('comments', del.dataset.delc)));
+  }
+});
+// Open an item straight at its comments (from the 💬 count on a row or card).
+function openComments(id) {
+  openCard(id);
+  setTimeout(() => { $('cComTitle').scrollIntoView({ behavior: 'smooth', block: 'start' }); $('cComText').focus({ preventScroll: true }); }, 150);
+}
 
 // ---------- Tabs ----------
 const TITLES = { home: 'Home', clock: 'Clock', mytasks: 'My tasks', sheet: 'Timesheets', people: 'People', teams: 'Teams', map: 'Map', board: 'Board', settings: 'Settings' };

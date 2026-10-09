@@ -95,6 +95,17 @@ service cloud.firestore {
         allow update: if isMember(org) && request.resource.data.createdBy == resource.data.createdBy;
         allow delete: if isAdmin(org) || hasRole(org, ['manager']) || (isMember(org) && resource.data.createdBy == uid());
       }
+      // Comments on board items: anyone in the organisation can read and post; authors edit their own,
+      // authors and admins can delete.
+      match /comments/{cm} {
+        allow read: if isMember(org);
+        allow create: if isMember(org) && approved(org) && request.resource.data.authorId == uid()
+          && request.resource.data.text is string && request.resource.data.text.size() <= 5000;
+        allow update: if isMember(org) && resource.data.authorId == uid()
+          && request.resource.data.authorId == uid() && request.resource.data.cardId == resource.data.cardId
+          && request.resource.data.text is string && request.resource.data.text.size() <= 5000;
+        allow delete: if isAdmin(org) || (isMember(org) && resource.data.authorId == uid());
+      }
 
       match /shifts/{s} {
         allow read: if signedIn() && (resource.data.uid == uid() || isAdmin(org) || managesTeam(org, resource.data.teamId));
